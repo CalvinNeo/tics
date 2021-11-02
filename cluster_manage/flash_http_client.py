@@ -10,7 +10,7 @@ def curl_flash(address, params):
     return r
 
 
-def get_region_count_by_table(store_list, table_id, replica_count):
+def get_region_count_by_table(logger, store_list, table_id, replica_count):
     from tikv_util import common
 
     checker = common.CheckRegionCnt()
@@ -18,6 +18,7 @@ def get_region_count_by_table(store_list, table_id, replica_count):
     for store in store_list:
         try:
             res = util.curl_http('{}/tiflash/sync-status/{}'.format(store.tiflash_status_address, table_id))
+            logger.info("get_region_count_by_table return {}".format(res.content))
             util.check_status_code(res)
             checker.add(res.content)
         except Exception as e:

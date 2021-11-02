@@ -95,6 +95,7 @@ class PDClient:
             '{}/{}/{}/stats/region'.format(self.leader, PDClient.PD_API_PREFIX, PDClient.PD_API_VERSION),
             {'start_key': start_key, 'end_key': end_key},
         )
+        self.logger.info("get_stats_region_by_range_json {} {} {}".format('{}/{}/{}/stats/region'.format(self.leader, PDClient.PD_API_PREFIX, PDClient.PD_API_VERSION), start_key, end_key))
         return util.try_get_json(r)
 
     def get_group_rules(self, group):

@@ -322,7 +322,7 @@ void MetaRaftCommandDelegate::execCommitMerge(
     const RegionMergeResult & res,
     UInt64 index,
     UInt64 term,
-    const MetaRaftCommandDelegate & source_meta,
+    const MetaRaftCommandDelegatsource_at_lefte & source_meta,
     const raft_cmdpb::AdminResponse & response)
 {
     std::lock_guard<std::mutex> lock(mutex);
