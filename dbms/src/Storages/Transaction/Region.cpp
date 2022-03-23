@@ -522,7 +522,7 @@ std::tuple<WaitIndexResult, double> Region::waitIndex(UInt64 index, const UInt64
         if (!meta.checkIndex(index))
         {
             Stopwatch wait_index_watch;
-            LOG_FMT_DEBUG(log,
+            LOG_FMT_INFO(log,
                           "{} need to wait learner index {}",
                           toString(),
                           index);
@@ -532,20 +532,26 @@ std::tuple<WaitIndexResult, double> Region::waitIndex(UInt64 index, const UInt64
             {
             case WaitIndexResult::Finished:
             {
-                LOG_FMT_DEBUG(log,
-                              "{} wait learner index {} done",
+                LOG_FMT_INFO(log,
+                              "{} wait learner index {} done {}",
                               toString(false),
-                              index);
+                              index,
+                              elapsed_secs);
                 return {wait_idx_res, elapsed_secs};
             }
             case WaitIndexResult::Terminated:
             {
+                LOG_FMT_INFO(log,
+                             "{} wait learner index {} termed {}",
+                             toString(false),
+                             index,
+                             elapsed_secs);
                 return {wait_idx_res, elapsed_secs};
             }
             case WaitIndexResult::Timeout:
             {
                 ProfileEvents::increment(ProfileEvents::RaftWaitIndexTimeout);
-                LOG_FMT_WARNING(log, "{} wait learner index {} timeout", toString(false), index);
+                LOG_FMT_WARNING(log, "{} wait learner index {} timeout {}", toString(false), index, elapsed_secs);
                 return {wait_idx_res, elapsed_secs};
             }
             }
