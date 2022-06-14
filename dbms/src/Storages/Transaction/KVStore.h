@@ -223,7 +223,7 @@ private:
         UInt64 index,
         UInt64 term,
         TMTContext & tmt);
-    bool canFlushRegionDataImpl(const RegionPtr curr_region_ptr, UInt8 flush_if_possible, TMTContext & tmt, const RegionTaskLock & region_task_lock);
+    bool canFlushRegionDataImpl(const RegionPtr & curr_region_ptr, UInt8 flush_if_possible, TMTContext & tmt, const RegionTaskLock & region_task_lock);
 
     void persistRegion(const Region & region, const RegionTaskLock & region_task_lock, const char * caller);
     void releaseReadIndexWorkers();

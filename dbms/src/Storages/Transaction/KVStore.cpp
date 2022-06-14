@@ -332,7 +332,7 @@ bool KVStore::canFlushRegionData(UInt64 region_id, UInt8 flush_if_possible, TMTC
     return canFlushRegionDataImpl(curr_region_ptr, flush_if_possible, tmt, region_task_lock);
 }
 
-bool KVStore::canFlushRegionDataImpl(const RegionPtr curr_region_ptr, UInt8 flush_if_possible, TMTContext & tmt, const RegionTaskLock & region_task_lock) {
+bool KVStore::canFlushRegionDataImpl(const RegionPtr & curr_region_ptr, UInt8 flush_if_possible, TMTContext & tmt, const RegionTaskLock & region_task_lock) {
     auto & curr_region = *curr_region_ptr;
     if (curr_region_ptr == nullptr)
     {
