@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include <Storages/Transaction/RegionCFDataBase.h>
-#include <Storages/Transaction/RegionCFDataTrait.h>
 #include <Storages/Transaction/RegionData.h>
 #include <Storages/Transaction/RegionRangeKeys.h>
 
@@ -266,7 +265,7 @@ template struct RegionCFDataBase<RegionLockCFDataTrait>;
 namespace RecordKVFormat
 {
 // https://github.com/tikv/tikv/blob/master/components/txn_types/src/lock.rs
-inline void decodeLockCfValue(DecodedLockCFValue & res)
+void decodeLockCfValue(DecodedLockCFValue & res)
 {
     const TiKVValue & value = *res.val;
     const char * data = value.data();

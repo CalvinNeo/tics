@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <Storages/Transaction/RegionCFDataTrait.h>
 #include <Storages/Transaction/TiKVKeyValue.h>
 
 #include <map>
@@ -75,5 +76,10 @@ private:
 private:
     Data data;
 };
+
+namespace RecordKVFormat
+{
+void decodeLockCfValue(DecodedLockCFValue & res);
+} // namespace RecordKVFormat
 
 } // namespace DB

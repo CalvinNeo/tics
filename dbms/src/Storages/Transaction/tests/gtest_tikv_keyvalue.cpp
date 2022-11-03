@@ -18,6 +18,8 @@
 #include <Storages/Transaction/TiKVRange.h>
 #include <TestUtils/TiFlashTestBasic.h>
 
+#include <memory>
+
 #include "region_helper.h"
 
 namespace DB
@@ -520,6 +522,17 @@ try
     EXPECT_EQ(RecordKVFormat::DecodedTiKVKeyRangeToDebugString(raw_keys), "[?, ?)");
 
     Redact::setRedactLog(false); // restore flags
+
+    {
+        std::string s = "534A748000000000000A1F5F6980000000000000010380000000000000430380000000000000058780C0C0F3BCB98806CB9C01660610E5E738100007630610E5E7381000086C06000E96921C000901";
+        auto v1 = Redact::debugStringToKey(s.data(), s.size());
+        auto v2 = Redact::keyToDebugString(v1.data(), v1.size());
+        EXPECT_EQ(s, v2);
+        auto k = std::make_shared<const TiKVKey>(RecordKVFormat::genKey(1, 1, 1));
+        auto v = std::make_shared<const TiKVValue>(TiKVValue{std::move(v1)});
+        RecordKVFormat::DecodedLockCFValue decoded{k, v};
+        RecordKVFormat::decodeLockCfValue(decoded);
+    }
 }
 CATCH
 
