@@ -14,7 +14,7 @@
 
 #include <DataStreams/BlocksListBlockInputStream.h>
 #include <DataStreams/IProfilingBlockInputStream.h>
-#include <Storages/DeltaMerge/PKSquashingBlockInputStream.h>
+#include <Storages/DeltaMerge/Decode.PKSquashingBlockInputStream.h>
 #include <Storages/DeltaMerge/tests/DMTestEnv.h>
 #include <TestUtils/InputStreamTestUtils.h>
 
