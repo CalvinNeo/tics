@@ -32,12 +32,15 @@ mysql> set session tidb_isolation_read_engines='tiflash'; select * from test.t;
 
 mysql> truncate table test.t;
 
+
 => DBGInvoke __refresh_schemas()
 
 mysql> select * from test.t;
 
->> select tidb_database,tidb_name from system.tables where tidb_database = 'test' and tidb_name='t' and is_tombstone = 0
 
+>> select tidb_database,tidb_name,tidb_table_id from system.tables where tidb_database = 'test' and tidb_name='t' and is_tombstone = 0
+
+>> SELECT tidb_database,tidb_name,tidb_table_id,is_tombstone,data_path from system.tables where tidb_database = 'test' and tidb_name='t'
 
 mysql> insert into test.t values (2, 2);
 

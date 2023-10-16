@@ -59,6 +59,7 @@ static DM::WriteResult writeRegionDataToStorage(
     RegionDataReadInfoList & data_list_read,
     const LoggerPtr & log)
 {
+    LOG_INFO(log, "!!!!! writeRegionDataToStorage");
     const auto & tmt = context.getTMTContext();
     const auto keyspace_id = region->getKeyspaceID();
     const auto table_id = region->getMappedTableID();
@@ -372,6 +373,7 @@ DM::WriteResult RegionTable::writeBlockByRegion(
     const LoggerPtr & log,
     bool lock_region)
 {
+    LOG_INFO(log, "!!!!! RegionTable::writeBlockByRegion");
     std::optional<RegionDataReadInfoList> data_list_read = std::nullopt;
     if (region.pre_decode_cache)
     {

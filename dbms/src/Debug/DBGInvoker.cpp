@@ -156,6 +156,7 @@ std::string & normalizeArg(std::string & arg)
 
 BlockInputStreamPtr DBGInvoker::invoke(Context & context, const std::string & ori_name, const ASTs & args)
 {
+    LOG_INFO(&Poco::Logger::get("!!!! f"), "!!!!! DBGInvoker::invoke {}", ori_name);
     static const std::string prefix_not_print_res = "__";
     bool print_res = true;
     std::string name = ori_name;
@@ -166,12 +167,16 @@ BlockInputStreamPtr DBGInvoker::invoke(Context & context, const std::string & or
         name = ori_name.substr(prefix_not_print_res.size(), ori_name.size() - prefix_not_print_res.size());
     }
 
+    LOG_INFO(&Poco::Logger::get("!!!! f"), "!!!!! DBGInvoker::invoke name {}", name);
     BlockInputStreamPtr res;
     auto it_schemaless = schemaless_funcs.find(name);
-    if (it_schemaless != schemaless_funcs.end())
+    if (it_schemaless != schemaless_funcs.end()) {
+        LOG_INFO(&Poco::Logger::get("!!!! f"), "!!!!! DBGInvoker::invoke schemaless_funcs {}", name);
         res = invokeSchemaless(context, name, it_schemaless->second, args);
+    }
     else
     {
+        LOG_INFO(&Poco::Logger::get("!!!! f"), "!!!!! DBGInvoker::invoke schemaful_funcs {}", name);
         auto it_schemaful = schemaful_funcs.find(name);
         if (it_schemaful != schemaful_funcs.end())
             res = invokeSchemaful(context, name, it_schemaful->second, args);
@@ -179,6 +184,7 @@ BlockInputStreamPtr DBGInvoker::invoke(Context & context, const std::string & or
             throw Exception("DBG function not found", ErrorCodes::BAD_ARGUMENTS);
     }
 
+    LOG_INFO(&Poco::Logger::get("!!!! f"), "!!!!! DBGInvoker::endinvoke {}", ori_name);
     return print_res ? res : std::shared_ptr<StringStreamBlockInputStream>();
 }
 

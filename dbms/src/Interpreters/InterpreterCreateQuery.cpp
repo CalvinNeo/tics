@@ -497,6 +497,7 @@ BlockIO InterpreterCreateQuery::createTable(ASTCreateQuery & create)
     String table_name = create.table;
     String table_name_escaped = escapeForFileName(table_name);
 
+    LOG_INFO(Logger::get("InterpreterCreateQuery"), "!!!!! InterpreterCreateQuery::createTable {}", table_name);
     // If this is a stub ATTACH query, read the query definition from the database
     if (create.attach && !create.storage && !create.columns)
     {
@@ -627,6 +628,7 @@ BlockIO InterpreterCreateQuery::createTable(ASTCreateQuery & create)
         // start up before adding to `database`, or the storage can not be retrieved from `ManagedStorages::get`
         res->startup();
 
+        LOG_INFO(Logger::get("InterpreterCreateQuery"), "!!!!! InterpreterCreateQuery::createTable2 {}", table_name);
         if (create.is_temporary)
             context.getSessionContext().addExternalTable(table_name, res, query_ptr);
         else

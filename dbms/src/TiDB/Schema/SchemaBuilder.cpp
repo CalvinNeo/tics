@@ -66,6 +66,7 @@ bool isReservedDatabase(Context & context, const String & database_name)
 template <typename Getter, typename NameMapper>
 void SchemaBuilder<Getter, NameMapper>::applyCreateTable(DatabaseID database_id, TableID table_id)
 {
+    LOG_INFO(log, "!!!!!! applyCreateTable {} {}", table_id, StackTrace().toString());
     auto table_info = getter.getTableInfo(database_id, table_id);
     if (table_info == nullptr) // the database maybe dropped
     {
@@ -1029,6 +1030,7 @@ void SchemaBuilder<Getter, NameMapper>::applyDropPhysicalTable(const String & db
 template <typename Getter, typename NameMapper>
 void SchemaBuilder<Getter, NameMapper>::applyDropTable(DatabaseID database_id, TableID table_id)
 {
+    LOG_INFO(log, "!!!!!! applyDropTable {} {}", table_id, "");
     auto & tmt_context = context.getTMTContext();
     auto * storage = tmt_context.getStorages().get(keyspace_id, table_id).get();
     if (storage == nullptr)

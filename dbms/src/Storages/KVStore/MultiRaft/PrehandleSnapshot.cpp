@@ -540,6 +540,7 @@ PrehandleResult KVStore::preHandleSSTsToDTFiles(
     DM::FileConvertJobType job_type,
     TMTContext & tmt)
 {
+    LOG_INFO(log, "!!!! preH, andleSSTsToDTFiles {}", snaps.len);
     // if it's only a empty snapshot, we don't create the Storage object, but return directly.
     if (snaps.len == 0)
     {

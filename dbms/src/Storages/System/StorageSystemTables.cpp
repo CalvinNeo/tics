@@ -175,6 +175,7 @@ BlockInputStreams StorageSystemTables::read(
     const size_t /*max_block_size*/,
     const unsigned /*num_streams*/)
 {
+    LOG_INFO(&Poco::Logger::get("!!!! zzz"), "!!!!! StorageSystemTables ===========");
     processed_stage = QueryProcessingStage::FetchColumns;
 
     Names real_column_names;
@@ -225,6 +226,7 @@ BlockInputStreams StorageSystemTables::read(
             String tidb_table_name;
             TableID table_id = -1;
             Timestamp tombstone = 0;
+
             if (engine_name == MutableSupport::txn_storage_name
                 || engine_name == MutableSupport::delta_tree_storage_name)
             {
@@ -245,6 +247,7 @@ BlockInputStreams StorageSystemTables::read(
             res_columns[j++]->insert(Int64(table_id));
             res_columns[j++]->insert(UInt64(tombstone));
 
+            LOG_INFO(&Poco::Logger::get("!!!! zzz"), "!!!!! StorageSystemTables {} {} {}", tidb_table_name, tombstone, table_id);
             res_columns[j++]->insert(UInt64(0));
             res_columns[j++]->insert(iterator->table()->getDataPath());
             res_columns[j++]->insert(database->getTableMetadataPath(table_name));

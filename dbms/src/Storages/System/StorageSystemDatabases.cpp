@@ -76,7 +76,7 @@ BlockInputStreams StorageSystemDatabases::read(
             database_id = db_info.id;
             tombstone = db_tiflash->getTombstone();
         }
-
+        LOG_INFO(&Poco::Logger::get("!!!! zzz"), "!!!!! StorageSystemDatabases {} {}", tidb_db_name, tombstone);
         res_columns[j++]->insert(tidb_db_name);
         res_columns[j++]->insert(Int64(database_id));
 

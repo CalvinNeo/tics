@@ -533,6 +533,7 @@ Block DeltaMergeStore::addExtraColumnIfNeed(
 
 DM::WriteResult DeltaMergeStore::write(const Context & db_context, const DB::Settings & db_settings, Block & block)
 {
+    LOG_INFO(log, "!!!!!! DeltaMergeStore::write 1111");
     LOG_TRACE(log, "Table write block, rows={} bytes={}", block.rows(), block.bytes());
 
     EventRecorder write_block_recorder(ProfileEvents::DMWriteBlock, ProfileEvents::DMWriteBlockNS);
@@ -565,6 +566,7 @@ DM::WriteResult DeltaMergeStore::write(const Context & db_context, const DB::Set
     // Write block by segments
     while (offset != rows)
     {
+        LOG_INFO(log, "!!!!!! DeltaMergeStore::write 2222");
         RowKeyValueRef start_key = rowkey_column.getRowKeyValue(offset);
         WriteBatches wbs(*storage_pool, db_context.getWriteLimiter());
         ColumnFilePtr write_column_file;
@@ -573,6 +575,7 @@ DM::WriteResult DeltaMergeStore::write(const Context & db_context, const DB::Set
         // Keep trying until succeeded.
         while (true)
         {
+            LOG_INFO(log, "!!!!!! DeltaMergeStore::write 3333");
             // Find the segment according to current start_key
             auto [segment, is_empty]
                 = getSegmentByStartKey(start_key, /*create_if_empty*/ true, /*throw_if_notfound*/ true);

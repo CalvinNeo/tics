@@ -24,6 +24,7 @@ namespace DB
 template <bool mock_getter, bool mock_mapper>
 bool TiDBSchemaSyncer<mock_getter, mock_mapper>::syncSchemas(Context & context)
 {
+    LOG_INFO(log, "!!!!!! syncSchemas 1");
     std::lock_guard<std::mutex> lock(mutex_for_sync_schema);
 
     GET_METRIC(tiflash_sync_schema_applying).Increment();
@@ -39,6 +40,7 @@ bool TiDBSchemaSyncer<mock_getter, mock_mapper>::syncSchemas(Context & context)
 
     if (version == SchemaGetter::SchemaVersionNotExist)
     {
+        LOG_INFO(log, "!!!!!! syncSchemas 2");
         // Tables and databases are already tombstoned and waiting for GC.
         if (cur_version == SchemaGetter::SchemaVersionNotExist)
         {
@@ -55,11 +57,13 @@ bool TiDBSchemaSyncer<mock_getter, mock_mapper>::syncSchemas(Context & context)
     }
     else
     {
+        LOG_INFO(log, "!!!!!! syncSchemas 3");
         if (version <= cur_version)
         {
             return false;
         }
 
+        LOG_INFO(log, "!!!!!! syncSchemas 4");
         LOG_INFO(
             log,
             "Start to sync schemas. current version is: {} and try to sync schema version to: {}",
@@ -94,6 +98,7 @@ bool TiDBSchemaSyncer<mock_getter, mock_mapper>::syncSchemas(Context & context)
         }
     }
 
+    LOG_INFO(log, "!!!!!! syncSchemas 7");
     LOG_INFO(
         log,
         "End sync schema, version has been updated to {}{}",

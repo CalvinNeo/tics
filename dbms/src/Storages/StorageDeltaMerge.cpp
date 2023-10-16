@@ -491,6 +491,7 @@ BlockOutputStreamPtr StorageDeltaMerge::write(const ASTPtr & query, const Settin
 
 WriteResult StorageDeltaMerge::write(Block & block, const Settings & settings)
 {
+    LOG_INFO(log, "!!!!! StorageDeltaMerge::write");
     auto & store = getAndMaybeInitStore();
 #ifndef NDEBUG
     {
@@ -1446,7 +1447,7 @@ void StorageDeltaMerge::alterImpl(
             tombstone = 0;
         }
     }
-
+    LOG_INFO(log, "StorageDeltaMerge::alterImpl {}", tombstone);
     updateDeltaMergeTableCreateStatement(
         database_name,
         table_name_,

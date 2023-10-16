@@ -228,7 +228,7 @@ void DatabaseTiFlash::createTable(
 
     /// A race condition would be possible if a table with the same name is simultaneously created using CREATE and using ATTACH.
     /// But there is protection from it - see using DDLGuard in InterpreterCreateQuery.
-
+    LOG_INFO(log, "!!!!! createTable {}", table_name);
     {
         std::lock_guard lock(mutex);
         if (tables.find(table_name) != tables.end())
