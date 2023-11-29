@@ -15,6 +15,7 @@
 #pragma once
 
 #include <Common/ComputeLabelHolder.h>
+#include <Common/Exception.h>
 #include <Common/ProcessCollector.h>
 #include <Common/TiFlashBuildInfo.h>
 #include <Common/nocopyable.h>
@@ -26,12 +27,10 @@
 #include <prometheus/histogram.h>
 #include <prometheus/registry.h>
 
+#include <cassert>
 #include <ext/scope_guard.h>
 #include <mutex>
 #include <shared_mutex>
-
-// to make GCC 11 happy
-#include <cassert>
 
 namespace DB
 {
@@ -113,11 +112,11 @@ namespace DB
     M(tiflash_coprocessor_request_memory_usage,                                                                                     \
       "Bucketed histogram of request memory usage",                                                                                 \
       Histogram,                                                                                                                    \
-      F(type_cop, {{"type", "cop"}}, ExpBuckets<16>{1024 * 1024, 2}),                                                               \
-      F(type_cop_stream, {{"type", "cop_stream"}}, ExpBuckets<16>{1024 * 1024, 2}),                                                 \
-      F(type_batch, {{"type", "batch"}}, ExpBuckets<20>{1024 * 1024, 2}),                                                           \
-      F(type_run_mpp_task, {{"type", "run_mpp_task"}}, ExpBuckets<20>{1024 * 1024, 2}),                                             \
-      F(type_run_mpp_query, {{"type", "run_mpp_query"}}, ExpBuckets<20>{1024 * 1024, 2}))                                           \
+      F(type_cop, {{"type", "cop"}}, ExpBuckets{1024 * 1024, 2, 16}),                                                               \
+      F(type_cop_stream, {{"type", "cop_stream"}}, ExpBuckets{1024 * 1024, 2, 16}),                                                 \
+      F(type_batch, {{"type", "batch"}}, ExpBuckets{1024 * 1024, 2, 20}),                                                           \
+      F(type_run_mpp_task, {{"type", "run_mpp_task"}}, ExpBuckets{1024 * 1024, 2, 20}),                                             \
+      F(type_run_mpp_query, {{"type", "run_mpp_query"}}, ExpBuckets{1024 * 1024, 2, 20}))                                           \
     M(tiflash_coprocessor_request_error,                                                                                            \
       "Total number of request error",                                                                                              \
       Counter,                                                                                                                      \
@@ -304,7 +303,7 @@ namespace DB
     M(tiflash_storage_page_write_batch_size,                                                                                        \
       "The size of each write batch in bytes",                                                                                      \
       Histogram,                                                                                                                    \
-      F(type_v3, {{"type", "v3"}}, ExpBuckets<10>{4 * 1024, 4}))                                                                    \
+      F(type_v3, {{"type", "v3"}}, ExpBuckets{4 * 1024, 4, 16}))                                                                    \
     M(tiflash_storage_page_write_duration_seconds,                                                                                  \
       "The duration of each write batch",                                                                                           \
       Histogram,                                                                                                                    \
@@ -415,7 +414,7 @@ namespace DB
       F(type_ingest_sst_sst2dt, {{"type", "ingest_sst_sst2dt"}}, ExpBuckets{0.05, 2, 10}),                                          \
       F(type_ingest_sst_upload, {{"type", "ingest_sst_upload"}}, ExpBuckets{0.05, 2, 10}),                                          \
       F(type_apply_snapshot_predecode, {{"type", "snapshot_predecode"}}, ExpBuckets{0.05, 2, 15}),                                  \
-      F(type_apply_snapshot_total, {{"type", "snapshot_total"}}, ExpBuckets{0.2, 2, 60}),                                           \
+      F(type_apply_snapshot_total, {{"type", "snapshot_total"}}, ExpBucketsWithRange{0.1, 2, 600}),                                 \
       F(type_apply_snapshot_predecode_sst2dt, {{"type", "snapshot_predecode_sst2dt"}}, ExpBuckets{0.05, 2, 15}),                    \
       F(type_apply_snapshot_predecode_parallel_wait,                                                                                \
         {{"type", "snapshot_predecode_parallel_wait"}},                                                                             \
@@ -781,6 +780,25 @@ struct ExpBuckets
     const double base;
     const size_t size;
 
+    constexpr ExpBuckets(const double start_, const double base_, const size_t size_)
+        : start(start_)
+        , base(base_)
+        , size(size_)
+    {
+#ifndef NDEBUG
+        // Checks under debug mode
+        // Check the base
+        RUNTIME_CHECK_MSG(base > 1.0, "incorrect base for ExpBuckets, start={} base={} size={}", start, base, size);
+        // Too many buckets will bring more network flow by transferring metrics
+        RUNTIME_CHECK_MSG(
+            size <= 50,
+            "too many metrics buckets, reconsider step/unit, start={} base={} size={}",
+            start,
+            base,
+            size);
+#endif
+    }
+
     // NOLINTNEXTLINE(google-explicit-constructor)
     inline operator prometheus::Histogram::BucketBoundaries() const &&
     {
@@ -806,8 +824,23 @@ struct ExpBucketsWithRange
     ExpBucketsWithRange(double start_, double base_, double end_)
         : start(start_)
         , base(base_)
+        , size(ExpBucketsWithRange::getSize(start_, end_, base_))
     {
-        size = ExpBucketsWithRange::getSize(start, end_, base);
+#ifndef NDEBUG
+        // Check the base
+        RUNTIME_CHECK_MSG(
+            base > 1.0,
+            "incorrect base for ExpBucketsWithRange, start={} base={} end={}",
+            start,
+            base,
+            end_);
+        RUNTIME_CHECK_MSG(
+            start_ < end_,
+            "incorrect start/end for ExpBucketsWithRange, start={} base={} end={}",
+            start,
+            base,
+            end_);
+#endif
     }
     // NOLINTNEXTLINE(google-explicit-constructor)
     inline operator prometheus::Histogram::BucketBoundaries() const &&
@@ -824,7 +857,7 @@ struct ExpBucketsWithRange
 private:
     const double start;
     const double base;
-    size_t size;
+    const size_t size;
 };
 
 // Buckets with same width
