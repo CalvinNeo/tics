@@ -303,7 +303,7 @@ namespace DB
     M(tiflash_storage_page_write_batch_size,                                                                                        \
       "The size of each write batch in bytes",                                                                                      \
       Histogram,                                                                                                                    \
-      F(type_v3, {{"type", "v3"}}, ExpBuckets{4 * 1024, 4, 16}))                                                                    \
+      F(type_v3, {{"type", "v3"}}, ExpBuckets{4 * 1024, 4, 10}))                                                                    \
     M(tiflash_storage_page_write_duration_seconds,                                                                                  \
       "The duration of each write batch",                                                                                           \
       Histogram,                                                                                                                    \
