@@ -39,7 +39,6 @@ namespace DB
 {
 namespace FailPoints
 {
-extern const char force_region_persist_version[];
 extern const char pause_when_persist_region[];
 } // namespace FailPoints
 
