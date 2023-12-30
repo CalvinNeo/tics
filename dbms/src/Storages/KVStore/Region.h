@@ -57,11 +57,30 @@ struct ReadIndexResult;
 enum class RaftstoreVer : uint8_t;
 class RegionTaskLock;
 
+enum class RegionPersistVersion : UInt32
+{
+    V1 = 1,
+    V2, // For eager gc
+    V3, // now for test, have a extension ReservedForTest
+};
+
+using MaybeRegionPersistExtension = UInt32;
+// The RegionPersistExtension has nothing to do with `version`.
+// No matter upgrading or downgrading, we parse a `MaybeRegionPersistExtension` if we KNOW this field.
+// We KNOW this field if it is LESS THAN `MaxKnownFlag`, so there should be NO hole before `MaxKnownFlag`.
+// Once a extension is registered, what it's stand for shouldn't be changed. E.g. if Ext1 is assigned to 10, then in any older or newer version, we can't assign another Ext2 to 10.
+enum class RegionPersistExtension : MaybeRegionPersistExtension
+{
+    Reserved1 = 1,
+    ReservedForTest = 2,
+};
+static_assert(std::is_same_v<MaybeRegionPersistExtension, UInt32>);
+
 /// Store all kv data of one region. Including 'write', 'data' and 'lock' column families.
 class Region : public std::enable_shared_from_this<Region>
 {
 public:
-    const static UInt32 CURRENT_VERSION;
+    const static UInt32 CURRENT_VERSION = static_cast<UInt32>(RegionPersistVersion::V2);
 
     static const auto PutFlag = RecordKVFormat::CFModifyFlag::PutFlag;
     static const auto DelFlag = RecordKVFormat::CFModifyFlag::DelFlag;
@@ -162,7 +181,9 @@ public: // Stats
     std::pair<UInt64, UInt64> getRaftLogEagerGCRange() const;
     void updateRaftLogEagerIndex(UInt64 new_truncate_index);
 
+    template <UInt32 version = CURRENT_VERSION>
     std::tuple<size_t, UInt64> serialize(WriteBuffer & buf) const;
+    template <UInt32 version = CURRENT_VERSION>
     static RegionPtr deserialize(ReadBuffer & buf, const TiFlashRaftProxyHelper * proxy_helper = nullptr);
 
     friend bool operator==(const Region & region1, const Region & region2)
