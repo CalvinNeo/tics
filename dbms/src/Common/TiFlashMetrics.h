@@ -233,6 +233,11 @@ static_assert(RAFT_REGION_BIG_WRITE_THRES * 4 < RAFT_REGION_BIG_WRITE_MAX, "Inva
       F(type_seg_split_ingest, {"type", "seg_split_ingest"}),                                                                       \
       F(type_seg_merge_bg_gc, {"type", "seg_merge_bg_gc"}),                                                                         \
       F(type_place_index_update, {"type", "place_index_update"}))                                                                   \
+    M(tiflash_storage_subtask_event_count,                                                                                          \
+      "Events while executing storage's sub task",                                                                                  \
+      Counter,                                                                                                                      \
+      F(type_delta_flush_failure, {"type", "delta_flush_failure"}),                                                                 \
+      F(type_delta_compact_failure, {"type", "delta_compact_failure"}))                                                             \
     M(tiflash_storage_subtask_duration_seconds,                                                                                     \
       "Bucketed histogram of storage's sub task duration",                                                                          \
       Histogram,                                                                                                                    \

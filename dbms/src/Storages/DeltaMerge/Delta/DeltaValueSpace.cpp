@@ -335,6 +335,7 @@ bool DeltaValueSpace::flush(DMContext & context)
     {
         // other thread is flushing, just return.
         LOG_DEBUG(log, "Flush stop because other thread is flushing, delta={}", simpleInfo());
+        GET_METRIC(tiflash_storage_subtask_event_count, type_delta_flush).Increment();
         return false;
     }
     SCOPE_EXIT({
@@ -360,6 +361,7 @@ bool DeltaValueSpace::flush(DMContext & context)
         if (abandoned.load(std::memory_order_relaxed))
         {
             LOG_DEBUG(log, "Flush stop because abandoned, delta={}", simpleInfo());
+            GET_METRIC(tiflash_storage_subtask_event_count, type_delta_flush).Increment();
             return false;
         }
         flush_task = mem_table_set->buildFlushTask(
@@ -399,6 +401,7 @@ bool DeltaValueSpace::flush(DMContext & context)
             // Delete written data.
             wbs.setRollback();
             LOG_DEBUG(log, "Flush stop because abandoned, delta={}", simpleInfo());
+            GET_METRIC(tiflash_storage_subtask_event_count, type_delta_flush).Increment();
             return false;
         }
 
@@ -406,6 +409,7 @@ bool DeltaValueSpace::flush(DMContext & context)
         {
             wbs.rollbackWrittenLogAndData();
             LOG_DEBUG(log, "Flush stop because structure got updated, delta={}", simpleInfo());
+            GET_METRIC(tiflash_storage_subtask_event_count, type_delta_flush).Increment();
             return false;
         }
 
@@ -449,6 +453,7 @@ bool DeltaValueSpace::compact(DMContext & context)
         if (abandoned.load(std::memory_order_relaxed))
         {
             LOG_DEBUG(log, "Compact stop because abandoned, delta={}", simpleInfo());
+            GET_METRIC(tiflash_storage_subtask_event_count, type_delta_compact).Increment();
             return false;
         }
         compaction_task = persisted_file_set->pickUpMinorCompaction(context);
@@ -482,6 +487,7 @@ bool DeltaValueSpace::compact(DMContext & context)
         {
             wbs.rollbackWrittenLogAndData();
             LOG_DEBUG(log, "Compact stop because abandoned, delta={}", simpleInfo());
+            GET_METRIC(tiflash_storage_subtask_event_count, type_delta_compact).Increment();
             return false;
         }
         if (!compaction_task->commit(persisted_file_set, wbs))
@@ -489,6 +495,7 @@ bool DeltaValueSpace::compact(DMContext & context)
             LOG_WARNING(log, "Structure has been updated during compact, delta={}", simpleInfo());
             wbs.rollbackWrittenLogAndData();
             LOG_DEBUG(log, "Compact stop because structure got updated, delta={}", simpleInfo());
+            GET_METRIC(tiflash_storage_subtask_event_count, type_delta_compact).Increment();
             return false;
         }
         // Reset to the index of first file that can be compacted if the minor compaction succeed,
