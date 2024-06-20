@@ -26,6 +26,7 @@
 #include <Storages/KVStore/Decode/RegionTable.h>
 #include <Storages/KVStore/Decode/TiKVRange.h>
 #include <Storages/KVStore/MultiRaft/Spill/RegionUncommittedDataList.h>
+#include <Storages/KVStore/MultiRaft/Spill/Spill.h>
 #include <Storages/KVStore/Read/LockException.h>
 #include <Storages/KVStore/Region.h>
 #include <Storages/KVStore/TMTContext.h>
@@ -35,6 +36,8 @@
 #include <TiDB/Schema/TiDBSchemaManager.h>
 #include <common/logger_useful.h>
 #include <fiu.h>
+
+#include <memory>
 
 namespace DB
 {
@@ -244,6 +247,7 @@ template DM::WriteResult writeRegionDataToStorage<RegionDataReadInfoList>(
     RegionDataReadInfoList & data_list_read,
     const LoggerPtr & log);
 
+
 // TODO(Spill) rename it after we support spill.
 // ReadList could be RegionDataReadInfoList
 template <typename ReadList>
@@ -402,10 +406,11 @@ void RemoveRegionCommitCache(const RegionPtr & region, const RegionDataReadInfoL
 {
     /// Remove data in region.
     auto remover = region->createCommittedRemover(lock_region);
-    for (const auto & [handle, write_type, commit_ts, value] : data_list_read)
+    for (const auto & [handle, write_type, commit_ts, value, big_txn_start_ts] : data_list_read)
     {
         std::ignore = write_type;
         std::ignore = value;
+        std::ignore = big_txn_start_ts;
         remover.remove({handle, commit_ts});
     }
 }
@@ -468,6 +473,15 @@ DM::WriteResult RegionTable::writeCommittedByRegion(
     auto write_result = writeRegionDataToStorage(context, region, data_list_read, log);
     auto prev_region_size = region->dataSize();
     RemoveRegionCommitCache(region, data_list_read, lock_region);
+
+    if unlikely (data_list_read.hasLargeTxn())
+    {
+        LOG_DEBUG(log, "Observed large txns [{}], region_id={}", data_list_read.toLargeTxnDebugString(), region->id());
+        for (const Timestamp & start_ts : data_list_read.getLargeTxns()) {
+            region->checkAndCommitLargeTxn(start_ts);
+        }
+    }
+
     auto new_region_size = region->dataSize();
     if likely (new_region_size <= prev_region_size)
     {

@@ -54,14 +54,14 @@ size_t RegionData::insert(ColumnFamilyType cf, TiKVKey && key, TiKVValue && valu
     {
     case ColumnFamilyType::Write:
     {
-        auto delta = write_cf.insert(std::move(key), std::move(value), mode);
+        auto delta = write_cf.insert(std::move(key), std::move(value), mode).size;
         cf_data_size += delta;
         reportAlloc(delta);
         return delta;
     }
     case ColumnFamilyType::Default:
     {
-        auto delta = default_cf.insert(std::move(key), std::move(value), mode);
+        auto delta = default_cf.insert(std::move(key), std::move(value), mode).size;
         cf_data_size += delta;
         reportAlloc(delta);
         return delta;
@@ -166,7 +166,25 @@ std::optional<RegionDataReadInfo> RegionData::readDataByWriteIt(
     {
         const auto & map = default_cf.getData();
         if (auto data_it = map.find({pk, decoded_val.prewrite_ts}); data_it != map.end())
-            return RegionDataReadInfo{pk, decoded_val.write_type, ts, RegionDefaultCFDataTrait::getTiKVValue(data_it)};
+        {
+            if unlikely (isLargeTxnByStartTS(decoded_val.prewrite_ts))
+            {
+                return RegionDataReadInfo{
+                    pk,
+                    decoded_val.write_type,
+                    ts,
+                    RegionDefaultCFDataTrait::getTiKVValue(data_it)};
+            }
+            else
+            {
+                return RegionDataReadInfo{
+                    pk,
+                    decoded_val.write_type,
+                    ts,
+                    RegionDefaultCFDataTrait::getTiKVValue(data_it),
+                    decoded_val.prewrite_ts};
+            }
+        }
         else
         {
             if (!hard_error)
@@ -281,6 +299,13 @@ void RegionData::assignRegionData(RegionData && new_region_data)
     orphan_keys_info = std::move(new_region_data.orphan_keys_info);
 
     cf_data_size = new_region_data.cf_data_size.load();
+}
+
+RegionDefaultCFData RegionData::takeDefaultCf() {
+    cf_data_size -= default_cf.getSize();
+    RegionDefaultCFData new_m;
+    std::swap(new_m, default_cf);
+    return new_m;
 }
 
 size_t RegionData::serialize(WriteBuffer & buf) const
