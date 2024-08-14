@@ -288,10 +288,13 @@ FileSegmentPtr FileCache::getOrWait(const S3::S3FilenameView & s3_fname, const s
     table.set(s3_key, file_seg);
     lock.unlock();
 
-    ++PerfContext::file_cache.fg_download_from_s3;
-    fgDownload(s3_key, file_seg);
+    PerfContext::file_cache.fg_download_from_s3++;
+    fgDownload(lock, s3_key, file_seg);
     if (!file_seg || !file_seg->isReadyToRead())
-        throw Exception(ErrorCodes::S3_ERROR, "Download object {} failed", s3_key);
+        throw Exception( //
+            ErrorCodes::S3_ERROR,
+            "Download object {} failed",
+            s3_key);
 
     return file_seg;
 }
@@ -673,7 +676,7 @@ void FileCache::bgDownload(const String & s3_key, FileSegmentPtr & file_seg)
         [this, s3_key = s3_key, file_seg = file_seg]() mutable { download(s3_key, file_seg); });
 }
 
-void FileCache::fgDownload(const String & s3_key, FileSegmentPtr & file_seg)
+void FileCache::fgDownload(std::unique_lock<std::mutex> & cache_lock, const String & s3_key, FileSegmentPtr & file_seg)
 {
     SYNC_FOR("FileCache::fgDownload"); // simulate long s3 download
 
@@ -693,10 +696,14 @@ void FileCache::fgDownload(const String & s3_key, FileSegmentPtr & file_seg)
         file_seg->setStatus(FileSegment::Status::Failed);
         GET_METRIC(tiflash_storage_remote_cache, type_dtfile_download_failed).Increment();
         file_seg.reset();
-        remove(s3_key);
+        remove(cache_lock, s3_key);
     }
 
-    LOG_DEBUG(log, "foreground downloading => s3_key {} finished", s3_key);
+    LOG_DEBUG(
+        log,
+        "foreground downloading count {} => s3_key {} finished",
+        bg_downloading_count.load(std::memory_order_relaxed),
+        s3_key);
 }
 
 bool FileCache::isS3Filename(const String & fname)
