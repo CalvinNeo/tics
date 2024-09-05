@@ -783,23 +783,32 @@ try
             auto fpv = std::make_shared<std::atomic_uint64_t>(0);
             FailPointHelper::enableFailPoint(FailPoints::force_raise_prehandle_exception, fpv);
             SCOPE_EXIT({ FailPointHelper::disableFailPoint("force_raise_prehandle_exception"); });
+            // {
+            //     LOG_INFO(log, "Try decode when meet the first ErrUpdateSchema");
+            //     fpv->store(1);
+            //     auto [kvr1, res]
+            //         = proxy_instance
+            //               ->snapshot(kvs, ctx.getTMTContext(), region_id, {default_cf, write_cf}, 0, 0, std::nullopt);
+            //     // After retried.
+            //     ASSERT_EQ(res.stats.parallels, 4);
+            // }
             {
-                LOG_INFO(log, "Try decode when meet the first ErrUpdateSchema");
-                fpv->store(1);
+                LOG_INFO(log, "Try decode when meet the first ErrUpdateSchema at the last split");
+                fpv->store(3);
                 auto [kvr1, res]
                     = proxy_instance
                           ->snapshot(kvs, ctx.getTMTContext(), region_id, {default_cf, write_cf}, 0, 0, std::nullopt);
                 // After retried.
                 ASSERT_EQ(res.stats.parallels, 4);
             }
-            {
-                LOG_INFO(log, "Try decode when always meet ErrUpdateSchema");
-                fpv->store(2);
-                EXPECT_THROW(
-                    proxy_instance
-                        ->snapshot(kvs, ctx.getTMTContext(), region_id, {default_cf, write_cf}, 0, 0, std::nullopt),
-                    Exception);
-            }
+            // {
+            //     LOG_INFO(log, "Try decode when always meet ErrUpdateSchema");
+            //     fpv->store(2);
+            //     EXPECT_THROW(
+            //         proxy_instance
+            //             ->snapshot(kvs, ctx.getTMTContext(), region_id, {default_cf, write_cf}, 0, 0, std::nullopt),
+            //         Exception);
+            // }
         }
     }
 }

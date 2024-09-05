@@ -255,6 +255,7 @@ void SSTFilesToDTFilesOutputStream<ChildStream>::write()
     {
         if (prehandle_task->isAbort())
         {
+            LOG_INFO(log, "!!!!!! abbbbbbbb {}", magic_enum::enum_name(prehandle_task->abortReason().value()));
             break;
         }
         SYNC_FOR("before_SSTFilesToDTFilesOutputStream::handle_one");

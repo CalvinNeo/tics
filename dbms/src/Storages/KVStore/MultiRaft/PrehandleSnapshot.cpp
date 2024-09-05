@@ -77,6 +77,7 @@ struct PrehandleTransformCtx
     const DM::SSTFilesToBlockInputStreamOpts & opts;
     TMTContext & tmt;
     UInt64 snapshot_index;
+    size_t total_splits;
 };
 
 void PreHandlingTrace::waitForSubtaskResources(uint64_t region_id, size_t parallel, size_t parallel_subtask_limit)
@@ -192,6 +193,18 @@ static inline std::tuple<ReadFromStreamResult, PrehandleResult> executeTransform
                     LOG_INFO(log, "Throw fake exception always");
                     throw Exception("fake exception", ErrorCodes::REGION_DATA_SCHEMA_UPDATED);
                 }
+                else if (flag->load() == 3)
+                {
+                    if (split_id == prehandle_ctx.total_splits - 2) {
+                        LOG_INFO(log, "Throw fake exception once at the last split");
+                        throw Exception("fake exception once at the last split", ErrorCodes::REGION_DATA_SCHEMA_UPDATED);
+                    } else {
+                        using namespace std::chrono_literals;
+                        std::this_thread::sleep_for(2s);
+                        LOG_INFO(log, "Cancel flag");
+                        flag->store(0);
+                    }
+                }
             }
         });
         FAIL_POINT_PAUSE(FailPoints::pause_before_prehandle_subtask);
@@ -199,6 +212,7 @@ static inline std::tuple<ReadFromStreamResult, PrehandleResult> executeTransform
         stream->write();
         stream->writeSuffix();
         auto res = ReadFromStreamResult{.error = PrehandleTransformStatus::Ok, .extra_msg = "", .region = new_region};
+        // If the split is aborted because of errors on other splits, reuse abort reason.
         auto abort_reason = prehandle_ctx.prehandle_task->abortReason();
         if (abort_reason)
         {
@@ -587,30 +601,42 @@ std::tuple<ReadFromStreamResult, PrehandleResult> executeParallelTransform(
     assert(head_result.error == PrehandleTransformStatus::Ok);
     prehandle_result = std::move(head_prehandle_result);
     // Aggregate results.
-    for (size_t split_id = 0; split_id < split_key_count; ++split_id)
     {
+        result.error = PrehandleTransformStatus::Ok;
         std::scoped_lock l(parallel_ctx->mut);
-        if (parallel_ctx->gather_res[split_id].error == PrehandleTransformStatus::Ok)
+        for (size_t split_id = 0; split_id < split_key_count; ++split_id)
         {
-            result.error = PrehandleTransformStatus::Ok;
-            auto & v = parallel_ctx->gather_prehandle_res[split_id];
-            prehandle_result.ingest_ids.insert(
-                prehandle_result.ingest_ids.end(),
-                std::make_move_iterator(v.ingest_ids.begin()),
-                std::make_move_iterator(v.ingest_ids.end()));
-            v.ingest_ids.clear();
-            prehandle_result.stats.mergeFrom(v.stats);
-            // Merge all uncommitted data in different splits.
-            new_region->mergeDataFrom(*parallel_ctx->gather_res[split_id].region);
+            LOG_INFO(log, "!!!!! dsdasdasdasd {} {}", split_id, magic_enum::enum_name(parallel_ctx->gather_res[split_id].error));
+            if (parallel_ctx->gather_res[split_id].error == PrehandleTransformStatus::Aborted) {
+                // `Aborted` happens when some other error is found on another split.
+                // We still have to find the direct reason.
+                result = parallel_ctx->gather_res[split_id];
+                result.extra_msg = fmt::format(", from {}", split_id);
+                break;
+            } else if (parallel_ctx->gather_res[split_id].error != PrehandleTransformStatus::Ok) {
+                // Once a prehandle has non-ok result other than `Aborted`, we quit further loop
+                result = parallel_ctx->gather_res[split_id];
+                result.extra_msg = fmt::format(", from {}", split_id);
+                break;
+            }
         }
-        else
-        {
-            // Once a prehandle has non-ok result, we quit further loop
-            result = parallel_ctx->gather_res[split_id];
-            result.extra_msg = fmt::format(", from {}", split_id);
-            break;
+
+        if (result.error == PrehandleTransformStatus::Ok) {
+            for (size_t split_id = 0; split_id < split_key_count; ++split_id)
+            {
+                auto & v = parallel_ctx->gather_prehandle_res[split_id];
+                prehandle_result.ingest_ids.insert(
+                    prehandle_result.ingest_ids.end(),
+                    std::make_move_iterator(v.ingest_ids.begin()),
+                    std::make_move_iterator(v.ingest_ids.end()));
+                v.ingest_ids.clear();
+                prehandle_result.stats.mergeFrom(v.stats);
+                // Merge all uncommitted data in different splits.
+                new_region->mergeDataFrom(*parallel_ctx->gather_res[split_id].region);
+            }
         }
     }
+
     LOG_INFO(
         log,
         "Finished all extra parallel prehandle task, write_cf={} dmfiles={} error={} splits={} cost={:.3f}s "
@@ -722,6 +748,7 @@ PrehandleResult KVStore::preHandleSSTsToDTFiles(
             ReadFromStreamResult result;
             if (split_keys.empty())
             {
+                prehandle_ctx.total_splits = 1;
                 LOG_INFO(
                     log,
                     "Single threaded prehandling for single region, range={} region_id={} snaps={}",
@@ -732,6 +759,7 @@ PrehandleResult KVStore::preHandleSSTsToDTFiles(
             }
             else
             {
+                prehandle_ctx.total_splits = split_keys.size() + 1;
                 std::tie(result, prehandle_result) = executeParallelTransform(
                     log,
                     prehandle_ctx,
@@ -760,8 +788,9 @@ PrehandleResult KVStore::preHandleSSTsToDTFiles(
                 // Update schema and try to decode again
                 LOG_INFO(
                     log,
-                    "Decoding Region snapshot data meet error, sync schema and try to decode again {} [error={}]",
+                    "Decoding Region snapshot data meet error, sync schema and try to decode again {}, error={} [extra_msg={}]",
                     new_region->toString(true),
+                    magic_enum::enum_name(result.error),
                     result.extra_msg);
                 GET_METRIC(tiflash_schema_trigger_count, type_raft_decode).Increment();
                 tmt.getSchemaSyncerManager()->syncTableSchema(context, keyspace_id, physical_table_id);
