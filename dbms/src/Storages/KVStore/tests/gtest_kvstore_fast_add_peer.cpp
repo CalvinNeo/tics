@@ -991,19 +991,24 @@ try
 }
 CATCH
 
-struct MockReadSeekStream {
-    MockReadSeekStream(String s) : inner_stream(s) {
-
-    }
-    ssize_t read(char * buf, size_t size) {
+struct MockReadSeekStream
+{
+    MockReadSeekStream(String s)
+        : inner_stream(s)
+    {}
+    ssize_t read(char * buf, size_t size)
+    {
         inner_stream.read(buf, size);
+        LOG_INFO(DB::Logger::get(), "!!!! gcount()={}", inner_stream.gcount());
         return inner_stream.gcount();
     }
-    off_t seek(off_t off, int) {
+    off_t seek(off_t off, int)
+    {
         ASSERT(off >= inner_stream.gcount());
         inner_stream.ignore(off - inner_stream.gcount());
         return inner_stream.gcount();
     }
+
 private:
     std::istringstream inner_stream;
 };
@@ -1012,22 +1017,61 @@ struct PrefetchCache
     using ReadFunc = std::function<ssize_t(char *, size_t)>;
     using SeekFunc = std::function<off_t(off_t, int)>;
 
-    PrefetchCache(UInt32 hit_limit_, ReadFunc read_func_, SeekFunc seek_func_, size_t buffer_size_) : hit_limit(hit_limit_), hit_count(0), read_func(read_func_), seek_func(seek_func_), buffer_size(buffer_size_) {}
+    PrefetchCache(UInt32 hit_limit_, ReadFunc read_func_, SeekFunc seek_func_, size_t buffer_size_)
+        : hit_limit(hit_limit_)
+        , hit_count(0)
+        , read_func(read_func_)
+        , seek_func(seek_func_)
+        , buffer_size(buffer_size_)
+    {
+        pos = buffer_size;
+    }
 
-    ssize_t read(char * buf, size_t size) {
-        if (++hit_count > hit_limit) {
+    // - If the read is filled entirely by cache, then we will return the "gcount" of the cache.
+    // - If the read is filled by both the cache and `read_func`,
+    //   + If the read_func returns a positive number, we will add the contribution of the cache, and then return.
+    //   + Otherwise, we will return what `read)func` returns.
+    ssize_t read(char * buf, size_t size)
+    {
+        if (hit_count++ < hit_limit)
+        {
+            // Do not use the cache.
             return read_func(buf, size);
         }
         maybePrefetch();
-        auto written = buffer.read(buf, size);
-        RUNTIME_CHECK(written >= size);
-        auto remaining = written - size;
-        if (written != size) {
-            auto res = read_func(buf + written, remaining);
-            if(res < 0) return res;
-            return res + written;
+        if (pos + size > buffer_limit)
+        {
+            LOG_INFO(
+                DB::Logger::get(),
+                "!!!! try read {} from cache + direct buffer_limit={} pos={}",
+                size,
+                buffer_limit,
+                pos);
+            // No enough data in cache.
+            ::memcpy(buf, write_buffer.data() + pos, buffer_limit);
+            auto read_from_cache = buffer_limit - pos;
+            pos = buffer_limit;
+            auto direct_read_bytes = size - buffer_limit;
+            LOG_INFO(
+                DB::Logger::get(),
+                "!!!! refill buffer_size={} buffer_limit={} direct_read_bytes={}",
+                buffer_size,
+                buffer_limit,
+                direct_read_bytes);
+            auto res = read_func(buf + buffer_limit, direct_read_bytes);
+            if (res < 0)
+                return res;
+            // We may not read `size` data.
+            LOG_INFO(DB::Logger::get(), "!!!! result res={} buffer_limit={} pos={}", res, buffer_limit, pos);
+            return res + read_from_cache;
         }
-        return written;
+        else
+        {
+            LOG_INFO(DB::Logger::get(), "!!!! try read {} from cache", size);
+            ::memcpy(buf, write_buffer.data() + pos, size);
+            pos += size;
+            return size;
+        }
     }
 
     // size_t seek(off_t off, int whence) {
@@ -1043,25 +1087,39 @@ struct PrefetchCache
     //     }
     // }
 
-    enum class PrefetchRes {
+    enum class PrefetchRes
+    {
         NeedNot,
         Ok,
     };
 
-    PrefetchRes maybePrefetch() {
-        if (eof) return PrefetchRes::NeedNot;
-        if (buffer.eof()) {
+    PrefetchRes maybePrefetch()
+    {
+        if (eof)
+        {
+            return PrefetchRes::NeedNot;
+        }
+        if (pos >= buffer_size)
+        {
             write_buffer.reserve(buffer_size);
             // TODO Check if it is OK to read when the rest of the chars are less than size.
             auto res = read_func(write_buffer.data(), buffer_size);
-            buffer = BufferWithOwnMemory<ReadBuffer>(buffer_size, write_buffer.data());
-            if (res < -1) {
+            LOG_INFO(DB::Logger::get(), "!!!! prefetch res res={}", res);
+            if (res < 0)
+            {
+                // Error state.
                 eof = true;
-                // Can't prefetch this more.
+            }
+            else
+            {
+                // If we actually got some data.
+                pos = 0;
+                buffer_limit = res;
             }
         }
         return PrefetchRes::NeedNot;
     }
+
 private:
     UInt32 hit_limit;
     std::atomic<UInt32> hit_count;
@@ -1069,7 +1127,8 @@ private:
     ReadFunc read_func;
     SeekFunc seek_func;
     size_t buffer_size;
-    BufferWithOwnMemory<ReadBuffer> buffer;
+    size_t pos;
+    size_t buffer_limit;
     std::vector<char> write_buffer;
 };
 
@@ -1077,8 +1136,12 @@ TEST(RegionElseTestFAP, NewCache)
 try
 {
     MockReadSeekStream s("0123456789");
-    PrefetchCache cache(0, std::bind(&MockReadSeekStream::read, &s, std::placeholders::_1, std::placeholders::_2), std::bind(&MockReadSeekStream::seek, &s, std::placeholders::_1, std::placeholders::_2), 2);
-    auto assertRead = [](MockReadSeekStream &, PrefetchCache & cache, size_t number, String expected){
+    PrefetchCache cache(
+        0,
+        std::bind(&MockReadSeekStream::read, &s, std::placeholders::_1, std::placeholders::_2),
+        std::bind(&MockReadSeekStream::seek, &s, std::placeholders::_1, std::placeholders::_2),
+        2);
+    auto assertRead = [](MockReadSeekStream &, PrefetchCache & cache, size_t number, String expected) {
         std::vector<char> v(number, '\0');
         auto r = cache.read(v.data(), number);
         ASSERT(r >= 0);
@@ -1086,9 +1149,13 @@ try
         std::string view{v.data(), real_number};
         ASSERT_EQ(view, expected);
     };
+    // Cache 2 + Direct 1
     assertRead(s, cache, 3, "012");
+    // Cache 2 + Direct 2
     assertRead(s, cache, 4, "3456");
+    // Cache 2 + Direct 1(Not enough)
     assertRead(s, cache, 5, "789");
+    assertRead(s, cache, 2, "");
 }
 CATCH
 
