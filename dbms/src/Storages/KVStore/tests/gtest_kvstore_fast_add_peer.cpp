@@ -991,5 +991,106 @@ try
 }
 CATCH
 
+struct MockReadSeekStream {
+    MockReadSeekStream(String s) : inner_stream(s) {
+
+    }
+    ssize_t read(char * buf, size_t size) {
+        inner_stream.read(buf, size);
+        return inner_stream.gcount();
+    }
+    off_t seek(off_t off, int) {
+        ASSERT(off >= inner_stream.gcount());
+        inner_stream.ignore(off - inner_stream.gcount());
+        return inner_stream.gcount();
+    }
+private:
+    std::istringstream inner_stream;
+};
+struct PrefetchCache
+{
+    using ReadFunc = std::function<ssize_t(char *, size_t)>;
+    using SeekFunc = std::function<off_t(off_t, int)>;
+
+    PrefetchCache(UInt32 hit_limit_, ReadFunc read_func_, SeekFunc seek_func_, size_t buffer_size_) : hit_limit(hit_limit_), hit_count(0), read_func(read_func_), seek_func(seek_func_), buffer_size(buffer_size_) {}
+
+    ssize_t read(char * buf, size_t size) {
+        if (++hit_count > hit_limit) {
+            return read_func(buf, size);
+        }
+        maybePrefetch();
+        auto written = buffer.read(buf, size);
+        RUNTIME_CHECK(written >= size);
+        auto remaining = written - size;
+        if (written != size) {
+            auto res = read_func(buf + written, remaining);
+            if(res < 0) return res;
+            return res + written;
+        }
+        return written;
+    }
+
+    // size_t seek(off_t off, int whence) {
+    //     if (++hit_count > hit_limit) {
+    //         return skip_func(buf, remaining);
+    //     }
+    //     maybePrefetch();
+    //     auto skipped = buffer.ignore(size);
+    //     RUNTIME_CHECK(skipped >= size);
+    //     auto remaining = skipped - size;
+    //     if (skipped != size) {
+    //         skip_func(off + skipped, whence);
+    //     }
+    // }
+
+    enum class PrefetchRes {
+        NeedNot,
+        Ok,
+    };
+
+    PrefetchRes maybePrefetch() {
+        if (eof) return PrefetchRes::NeedNot;
+        if (buffer.eof()) {
+            write_buffer.reserve(buffer_size);
+            // TODO Check if it is OK to read when the rest of the chars are less than size.
+            auto res = read_func(write_buffer.data(), buffer_size);
+            buffer = BufferWithOwnMemory<ReadBuffer>(buffer_size, write_buffer.data());
+            if (res < -1) {
+                eof = true;
+                // Can't prefetch this more.
+            }
+        }
+        return PrefetchRes::NeedNot;
+    }
+private:
+    UInt32 hit_limit;
+    std::atomic<UInt32> hit_count;
+    bool eof = false;
+    ReadFunc read_func;
+    SeekFunc seek_func;
+    size_t buffer_size;
+    BufferWithOwnMemory<ReadBuffer> buffer;
+    std::vector<char> write_buffer;
+};
+
+TEST(RegionElseTestFAP, NewCache)
+try
+{
+    MockReadSeekStream s("0123456789");
+    PrefetchCache cache(0, std::bind(&MockReadSeekStream::read, &s, std::placeholders::_1, std::placeholders::_2), std::bind(&MockReadSeekStream::seek, &s, std::placeholders::_1, std::placeholders::_2), 2);
+    auto assertRead = [](MockReadSeekStream &, PrefetchCache & cache, size_t number, String expected){
+        std::vector<char> v(number, '\0');
+        auto r = cache.read(v.data(), number);
+        ASSERT(r >= 0);
+        auto real_number = std::min(number, (size_t)r);
+        std::string view{v.data(), real_number};
+        ASSERT_EQ(view, expected);
+    };
+    assertRead(s, cache, 3, "012");
+    assertRead(s, cache, 4, "3456");
+    assertRead(s, cache, 5, "789");
+}
+CATCH
+
 } // namespace tests
 } // namespace DB
