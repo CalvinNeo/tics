@@ -1051,14 +1051,15 @@ struct PrefetchCache
             ::memcpy(buf, write_buffer.data() + pos, buffer_limit);
             auto read_from_cache = buffer_limit - pos;
             pos = buffer_limit;
-            auto direct_read_bytes = size - buffer_limit;
+            auto direct_read_bytes = size - read_from_cache;
             LOG_INFO(
                 DB::Logger::get(),
-                "!!!! refill buffer_size={} buffer_limit={} direct_read_bytes={}",
+                "!!!! refill buffer_size={} buffer_limit={} direct_read_bytes={} read_from_cache={}",
                 buffer_size,
                 buffer_limit,
-                direct_read_bytes);
-            auto res = read_func(buf + buffer_limit, direct_read_bytes);
+                direct_read_bytes,
+                read_from_cache);
+            auto res = read_func(buf + read_from_cache, direct_read_bytes);
             if (res < 0)
                 return res;
             // We may not read `size` data.
@@ -1135,12 +1136,6 @@ private:
 TEST(RegionElseTestFAP, NewCache)
 try
 {
-    MockReadSeekStream s("0123456789");
-    PrefetchCache cache(
-        0,
-        std::bind(&MockReadSeekStream::read, &s, std::placeholders::_1, std::placeholders::_2),
-        std::bind(&MockReadSeekStream::seek, &s, std::placeholders::_1, std::placeholders::_2),
-        2);
     auto assertRead = [](MockReadSeekStream &, PrefetchCache & cache, size_t number, String expected) {
         std::vector<char> v(number, '\0');
         auto r = cache.read(v.data(), number);
@@ -1149,13 +1144,41 @@ try
         std::string view{v.data(), real_number};
         ASSERT_EQ(view, expected);
     };
-    // Cache 2 + Direct 1
-    assertRead(s, cache, 3, "012");
-    // Cache 2 + Direct 2
-    assertRead(s, cache, 4, "3456");
-    // Cache 2 + Direct 1(Not enough)
-    assertRead(s, cache, 5, "789");
-    assertRead(s, cache, 2, "");
+    {
+        MockReadSeekStream s("0123456789");
+        PrefetchCache cache(
+            0,
+            std::bind(&MockReadSeekStream::read, &s, std::placeholders::_1, std::placeholders::_2),
+            std::bind(&MockReadSeekStream::seek, &s, std::placeholders::_1, std::placeholders::_2),
+            2);
+        assertRead(s, cache, 0, "");
+        // Cache 1
+        assertRead(s, cache, 1, "0");
+        // Cache 2
+        assertRead(s, cache, 2, "12");
+        // Cache 2 + Direct 2
+        assertRead(s, cache, 4, "3456");
+        // Cache 2 + Direct 1(Not enough)
+        assertRead(s, cache, 5, "789");
+        assertRead(s, cache, 2, "");
+    }
+    {
+        MockReadSeekStream s("0123456789");
+        PrefetchCache cache(
+            0,
+            std::bind(&MockReadSeekStream::read, &s, std::placeholders::_1, std::placeholders::_2),
+            std::bind(&MockReadSeekStream::seek, &s, std::placeholders::_1, std::placeholders::_2),
+            2);
+        assertRead(s, cache, 0, "");
+        assertRead(s, cache, 5, "01234");
+        assertRead(s, cache, 0, "");
+        assertRead(s, cache, 1, "5");
+        assertRead(s, cache, 0, "");
+        assertRead(s, cache, 2, "67");
+        assertRead(s, cache, 0, "");
+        assertRead(s, cache, 3, "89");
+        assertRead(s, cache, 4, "");
+    }
 }
 CATCH
 
