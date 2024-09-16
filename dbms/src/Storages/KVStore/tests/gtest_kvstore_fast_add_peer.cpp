@@ -1050,18 +1050,25 @@ struct PrefetchCache
             // No enough data in cache.
             ::memcpy(buf, write_buffer.data() + pos, buffer_limit);
             auto read_from_cache = buffer_limit - pos;
+            cache_read += read_from_cache;
             pos = buffer_limit;
-            auto direct_read_bytes = size - read_from_cache;
+            auto expected_direct_read_bytes = size - read_from_cache;
+            auto res = read_func(buf + read_from_cache, expected_direct_read_bytes);
             LOG_INFO(
                 DB::Logger::get(),
-                "!!!! refill buffer_size={} buffer_limit={} direct_read_bytes={} read_from_cache={}",
+                "!!!! refill pos={} size={} buffer_size={} buffer_limit={} expected_direct_read_bytes={} "
+                "read_from_cache={} res={} direct={}",
+                pos,
+                size,
                 buffer_size,
                 buffer_limit,
-                direct_read_bytes,
-                read_from_cache);
-            auto res = read_func(buf + read_from_cache, direct_read_bytes);
+                expected_direct_read_bytes,
+                read_from_cache,
+                res,
+                direct_read);
             if (res < 0)
                 return res;
+            direct_read += res;
             // We may not read `size` data.
             LOG_INFO(DB::Logger::get(), "!!!! result res={} buffer_limit={} pos={}", res, buffer_limit, pos);
             return res + read_from_cache;
@@ -1070,6 +1077,7 @@ struct PrefetchCache
         {
             LOG_INFO(DB::Logger::get(), "!!!! try read {} from cache", size);
             ::memcpy(buf, write_buffer.data() + pos, size);
+            cache_read += size;
             pos += size;
             return size;
         }
@@ -1121,6 +1129,9 @@ struct PrefetchCache
         return PrefetchRes::NeedNot;
     }
 
+    size_t getCacheRead() const { return cache_read; }
+    size_t getDirectRead() const { return direct_read; }
+
 private:
     UInt32 hit_limit;
     std::atomic<UInt32> hit_count;
@@ -1131,6 +1142,8 @@ private:
     size_t pos;
     size_t buffer_limit;
     std::vector<char> write_buffer;
+    size_t direct_read = 0;
+    size_t cache_read = 0;
 };
 
 TEST(RegionElseTestFAP, NewCache)
@@ -1145,6 +1158,21 @@ try
         ASSERT_EQ(view, expected);
     };
     {
+        // Test hit
+        MockReadSeekStream s("0123456789");
+        PrefetchCache cache(
+            2,
+            std::bind(&MockReadSeekStream::read, &s, std::placeholders::_1, std::placeholders::_2),
+            std::bind(&MockReadSeekStream::seek, &s, std::placeholders::_1, std::placeholders::_2),
+            2);
+        assertRead(s, cache, 0, "");
+        ASSERT_EQ(cache.getCacheRead(), 0);
+        assertRead(s, cache, 2, "01");
+        ASSERT_EQ(cache.getCacheRead(), 0);
+        assertRead(s, cache, 1, "2");
+        ASSERT_EQ(cache.getCacheRead(), 1);
+    }
+    {
         MockReadSeekStream s("0123456789");
         PrefetchCache cache(
             0,
@@ -1154,12 +1182,20 @@ try
         assertRead(s, cache, 0, "");
         // Cache 1
         assertRead(s, cache, 1, "0");
-        // Cache 2
+        ASSERT_EQ(cache.getCacheRead(), 1);
+        ASSERT_EQ(cache.getDirectRead(), 0);
+        // Cache 1 + Direct 1
         assertRead(s, cache, 2, "12");
+        ASSERT_EQ(cache.getCacheRead(), 1 + 1);
+        ASSERT_EQ(cache.getDirectRead(), 1);
         // Cache 2 + Direct 2
         assertRead(s, cache, 4, "3456");
+        ASSERT_EQ(cache.getCacheRead(), 1 + 1 + 2);
+        ASSERT_EQ(cache.getDirectRead(), 1 + 2);
         // Cache 2 + Direct 1(Not enough)
         assertRead(s, cache, 5, "789");
+        ASSERT_EQ(cache.getCacheRead(), 2 + 2 + 2);
+        ASSERT_EQ(cache.getDirectRead(), 1 + 2 + 1);
         assertRead(s, cache, 2, "");
     }
     {
