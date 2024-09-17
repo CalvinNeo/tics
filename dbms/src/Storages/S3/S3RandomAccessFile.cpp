@@ -160,8 +160,9 @@ off_t S3RandomAccessFile::seekImpl(off_t offset_, int whence)
     {
         LOG_DEBUG(
             log,
-            "ignore_count={} cur_offset={} content_length={} cost={}ns",
-            offset_ - cur_offset,
+            "ignore_count={} direct_ignore_count={} cur_offset={} content_length={} cost={}ns",
+            ignore_count,
+            direct_ignore_count,
             cur_offset,
             content_length,
             elapsed_ns);

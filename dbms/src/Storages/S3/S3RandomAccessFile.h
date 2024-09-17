@@ -64,6 +64,9 @@ struct PrefetchCache
             // Do not use the cache.
             return read_func(buf, size);
         }
+        if (size == 0) {
+            return read_func(buf, size);
+        }
         maybePrefetch();
         if (pos + size > buffer_limit)
         {
@@ -95,6 +98,7 @@ struct PrefetchCache
         {
             return ignore_count;
         }
+        if (ignore_count == 0) return;
         maybePrefetch();
         if (pos + ignore_count > buffer_limit)
         {
@@ -123,7 +127,7 @@ struct PrefetchCache
         {
             return PrefetchRes::NeedNot;
         }
-        if (pos >= buffer_size)
+        if (pos >= buffer_limit)
         {
             write_buffer.reserve(buffer_size);
             // TODO Check if it is OK to read when the rest of the chars are less than size.
@@ -132,6 +136,8 @@ struct PrefetchCache
             {
                 // Error state.
                 eof = true;
+                pos = 0;
+                buffer_limit = 0;
             }
             else
             {
