@@ -17,7 +17,6 @@
 #include <Common/Stopwatch.h>
 #include <Common/StringUtils/StringUtils.h>
 #include <Common/TiFlashMetrics.h>
-#include <Encryption/MemoryRandomAccessFile.h>
 #include <Storages/DeltaMerge/ScanContext.h>
 #include <Storages/S3/FileCache.h>
 #include <Storages/S3/S3Common.h>
@@ -46,7 +45,7 @@ S3RandomAccessFile::S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_p
     RUNTIME_CHECK(client_ptr != nullptr);
     RUNTIME_CHECK(initialize(), remote_fname);
     // TODO Update parameters
-    prefetch = std::make_unique<PrefetchCache>(1, std::bind(&S3RandomAccessFile::readImpl, this, std::placeholders::_1, std::placeholders::_2), 10240);
+    prefetch = std::make_unique<PrefetchCache>(10, std::bind(&S3RandomAccessFile::readImpl, this, std::placeholders::_1, std::placeholders::_2), 1024 * 1024);
 }
 
 std::string S3RandomAccessFile::getFileName() const
