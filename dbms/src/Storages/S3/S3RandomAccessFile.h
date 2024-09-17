@@ -71,8 +71,8 @@ struct PrefetchCache
         if (pos + size > buffer_limit)
         {
             // No enough data in cache.
-            ::memcpy(buf, write_buffer.data() + pos, buffer_limit);
             auto read_from_cache = buffer_limit - pos;
+            ::memcpy(buf, write_buffer.data() + pos, read_from_cache);
             cache_read += read_from_cache;
             pos = buffer_limit;
             auto expected_direct_read_bytes = size - read_from_cache;
@@ -98,7 +98,7 @@ struct PrefetchCache
         {
             return ignore_count;
         }
-        if (ignore_count == 0) return;
+        if (ignore_count == 0) return 0;
         maybePrefetch();
         if (pos + ignore_count > buffer_limit)
         {
