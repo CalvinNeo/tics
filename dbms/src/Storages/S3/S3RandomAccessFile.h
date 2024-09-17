@@ -147,7 +147,7 @@ struct PrefetchCache
     size_t getDirectRead() const { return direct_read; }
     size_t getRevertCount() const {
         if (hit_count < hit_limit) return 0;
-        return buffer_limit;
+        return buffer_limit - pos;
     }
     bool needsRefill() const { return pos >= buffer_limit; }
 
