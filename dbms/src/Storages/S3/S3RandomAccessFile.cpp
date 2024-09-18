@@ -32,10 +32,82 @@ namespace ProfileEvents
 extern const Event S3GetObject;
 extern const Event S3ReadBytes;
 extern const Event S3GetObjectRetry;
+extern const Event S3CachedReadBytes;
+extern const Event S3CachedSkipBytes;
+extern const Event S3CachedRead;
+extern const Event S3CachedSkip;
 } // namespace ProfileEvents
 
 namespace DB::S3
 {
+// - If the read is filled entirely by cache, then we will return the "gcount" of the cache.
+// - If the read is filled by both the cache and `read_func`,
+//   + If the read_func returns a positive number, we will add the contribution of the cache, and then return.
+//   + Otherwise, we will return what `read)func` returns.
+ssize_t PrefetchCache::read(char * buf, size_t size)
+{
+    if (hit_count++ < hit_limit)
+    {
+        // Do not use the cache.
+        return read_func(buf, size);
+    }
+    if (size == 0) {
+        return read_func(buf, size);
+    }
+    maybePrefetch();
+    if (pos + size > buffer_limit)
+    {
+        // No enough data in cache.
+        auto read_from_cache = buffer_limit - pos;
+        ::memcpy(buf, write_buffer.data() + pos, read_from_cache);
+        cache_read += read_from_cache;
+        pos = buffer_limit;
+        auto expected_direct_read_bytes = size - read_from_cache;
+        auto res = read_func(buf + read_from_cache, expected_direct_read_bytes);
+        ProfileEvents::increment(ProfileEvents::S3CachedReadBytes, read_from_cache);
+
+        if (res < 0)
+            return res;
+        direct_read += res;
+        // We may not read `size` data.
+        return res + read_from_cache;
+    }
+    else
+    {
+        ::memcpy(buf, write_buffer.data() + pos, size);
+        cache_read += size;
+        ProfileEvents::increment(ProfileEvents::S3CachedReadBytes, size);
+        ProfileEvents::increment(ProfileEvents::S3CachedRead, 1);
+        pos += size;
+        return size;
+    }
+}
+
+size_t PrefetchCache::skip(size_t ignore_count) {
+    if (hit_count++ < hit_limit)
+    {
+        return ignore_count;
+    }
+    if (ignore_count == 0) return 0;
+    maybePrefetch();
+    if (pos + ignore_count > buffer_limit)
+    {
+        // No enough data in cache.
+        auto read_from_cache = buffer_limit - pos;
+        pos = buffer_limit;
+        auto expected_direct_read_bytes = ignore_count - read_from_cache;
+        ProfileEvents::increment(ProfileEvents::S3CachedSkipBytes, read_from_cache);
+        return expected_direct_read_bytes;
+    }
+    else
+    {
+        pos += ignore_count;
+        ProfileEvents::increment(ProfileEvents::S3CachedSkipBytes, ignore_count);
+        ProfileEvents::increment(ProfileEvents::S3CachedSkip, 1);
+        return 0;
+    }
+}
+
 S3RandomAccessFile::S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_ptr_, const String & remote_fname_)
     : client_ptr(std::move(client_ptr_))
     , remote_fname(remote_fname_)
@@ -186,7 +258,7 @@ bool S3RandomAccessFile::initialize()
         LOG_INFO(log, "S3 revert cache {}", to_revert);
         cur_offset -= to_revert;
     }
-    prefetch = std::make_unique<PrefetchCache>(10, std::bind(&S3RandomAccessFile::readImpl, this, std::placeholders::_1, std::placeholders::_2), 1024 * 1024);
+    prefetch = std::make_unique<PrefetchCache>(10, std::bind(&S3RandomAccessFile::readImpl, this, std::placeholders::_1, std::placeholders::_2), 5 * 1024 * 1024);
     Aws::S3::Model::GetObjectRequest req;
     req.SetRange(readRangeOfObject());
     client_ptr->setBucketAndKeyWithRoot(req, remote_fname);

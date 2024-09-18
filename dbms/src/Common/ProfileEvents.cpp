@@ -128,6 +128,8 @@
                                                \
     M(S3WriteBytes)                            \
     M(S3ReadBytes)                             \
+    M(S3CachedReadBytes)                       \
+    M(S3CachedSkipBytes)                       \
     M(S3CreateMultipartUpload)                 \
     M(S3UploadPart)                            \
     M(S3CompleteMultipartUpload)               \
@@ -137,6 +139,8 @@
     M(S3ListObjects)                           \
     M(S3DeleteObject)                          \
     M(S3CopyObject)                            \
+    M(S3CachedRead)                            \
+    M(S3CachedSkip)                            \
     M(S3GetObjectRetry)                        \
     M(S3PutObjectRetry)                        \
     M(FileCacheHit)                            \

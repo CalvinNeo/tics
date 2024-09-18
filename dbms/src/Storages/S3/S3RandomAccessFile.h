@@ -53,67 +53,8 @@ struct PrefetchCache
         pos = buffer_size;
     }
 
-    // - If the read is filled entirely by cache, then we will return the "gcount" of the cache.
-    // - If the read is filled by both the cache and `read_func`,
-    //   + If the read_func returns a positive number, we will add the contribution of the cache, and then return.
-    //   + Otherwise, we will return what `read)func` returns.
-    ssize_t read(char * buf, size_t size)
-    {
-        if (hit_count++ < hit_limit)
-        {
-            // Do not use the cache.
-            return read_func(buf, size);
-        }
-        if (size == 0) {
-            return read_func(buf, size);
-        }
-        maybePrefetch();
-        if (pos + size > buffer_limit)
-        {
-            // No enough data in cache.
-            auto read_from_cache = buffer_limit - pos;
-            ::memcpy(buf, write_buffer.data() + pos, read_from_cache);
-            cache_read += read_from_cache;
-            pos = buffer_limit;
-            auto expected_direct_read_bytes = size - read_from_cache;
-            auto res = read_func(buf + read_from_cache, expected_direct_read_bytes);
-
-            if (res < 0)
-                return res;
-            direct_read += res;
-            // We may not read `size` data.
-            return res + read_from_cache;
-        }
-        else
-        {
-            ::memcpy(buf, write_buffer.data() + pos, size);
-            cache_read += size;
-            pos += size;
-            return size;
-        }
-    }
-
-    size_t skip(size_t ignore_count) {
-        if (hit_count++ < hit_limit)
-        {
-            return ignore_count;
-        }
-        if (ignore_count == 0) return 0;
-        maybePrefetch();
-        if (pos + ignore_count > buffer_limit)
-        {
-            // No enough data in cache.
-            auto read_from_cache = buffer_limit - pos;
-            pos = buffer_limit;
-            auto expected_direct_read_bytes = ignore_count - read_from_cache;
-            return expected_direct_read_bytes;
-        }
-        else
-        {
-            pos += ignore_count;
-            return 0;
-        }
-    }
+    ssize_t read(char * buf, size_t size);
+    size_t skip(size_t ignore_count);
 
     enum class PrefetchRes
     {
