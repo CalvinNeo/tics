@@ -26,6 +26,11 @@ namespace Aws::S3
 class S3Client;
 }
 
+namespace DB::S3 {
+class S3RandomAccessFile;
+using S3RandomAccessFilePtr = std::shared_ptr<S3RandomAccessFile>;
+}
+
 namespace DB::PS::V3
 {
 using UniversalPageMap = std::map<UniversalPageId, Page>;
@@ -41,6 +46,7 @@ public:
     S3PageReader() = default;
 
     Page read(const UniversalPageIdAndEntry & page_id_and_entry);
+    std::tuple<Page, S3::S3RandomAccessFilePtr> readWithS3File(const UniversalPageIdAndEntry & page_id_and_entry, S3::S3RandomAccessFilePtr file);
 
     UniversalPageMap read(const UniversalPageIdAndEntries & page_id_and_entries);
 

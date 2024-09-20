@@ -23,26 +23,36 @@ namespace DB::PS::V3
 {
 Page S3PageReader::read(const UniversalPageIdAndEntry & page_id_and_entry)
 {
+    return std::get<0>(readWithS3File(page_id_and_entry, nullptr));
+}
+
+std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const UniversalPageIdAndEntry & page_id_and_entry, S3::S3RandomAccessFilePtr file) {
     const auto & page_entry = page_id_and_entry.second;
     RUNTIME_CHECK(page_entry.checkpoint_info.has_value());
     auto location = page_entry.checkpoint_info.data_location;
     const auto & remote_name = *location.data_file_id;
     auto remote_name_view = S3::S3FilenameView::fromKey(remote_name);
-    RandomAccessFilePtr remote_file;
+    S3::S3RandomAccessFilePtr s3_remote_file;
     auto s3_client = S3::ClientFactory::instance().sharedTiFlashClient();
-#ifdef DBMS_PUBLIC_GTEST
-    if (remote_name_view.isLockFile())
-    {
-#endif
-        remote_file = std::make_shared<S3::S3RandomAccessFile>(s3_client, remote_name_view.asDataFile().toFullKey());
-#ifdef DBMS_PUBLIC_GTEST
+    if (file == nullptr || location.offset_in_file >= file->getPos()) {
+    #ifdef DBMS_PUBLIC_GTEST
+        if (remote_name_view.isLockFile())
+        {
+    #endif
+            s3_remote_file = std::make_shared<S3::S3RandomAccessFile>(s3_client, remote_name_view.asDataFile().toFullKey());
+    #ifdef DBMS_PUBLIC_GTEST
+        }
+        else
+        {
+            // Just used in unit test which want to just focus on read write logic
+            s3_remote_file = std::make_shared<S3::S3RandomAccessFile>(s3_client, *location.data_file_id);
+        }
+    #endif
+    } else {
+        s3_remote_file = file;
     }
-    else
-    {
-        // Just used in unit test which want to just focus on read write logic
-        remote_file = std::make_shared<S3::S3RandomAccessFile>(s3_client, *location.data_file_id);
-    }
-#endif
+
+    RandomAccessFilePtr remote_file = s3_remote_file;
     ReadBufferFromRandomAccessFile buf(remote_file);
 
     buf.seek(location.offset_in_file, SEEK_SET);
@@ -61,8 +71,9 @@ Page S3PageReader::read(const UniversalPageIdAndEntry & page_id_and_entry)
         const auto offset = page_entry.field_offsets[index].first;
         page.field_offsets.emplace(index, offset);
     }
-    return page;
+    return std::make_tuple(page, s3_remote_file);
 }
+
 
 UniversalPageMap S3PageReader::read(const UniversalPageIdAndEntries & page_id_and_entries)
 {

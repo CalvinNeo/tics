@@ -97,6 +97,7 @@ struct PrefetchCache
         return buffer_limit - pos;
     }
     bool needsRefill() const { return pos >= buffer_limit; }
+    size_t unreadBytes() const { return buffer_limit - pos; }
 
 private:
     UInt32 hit_limit;
@@ -118,6 +119,8 @@ public:
     static RandomAccessFilePtr create(const String & remote_fname);
 
     S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_ptr_, const String & remote_fname_);
+
+    size_t getPos() const;
 
     // Can only seek forward.
     off_t seek(off_t offset, int whence) override;
@@ -175,5 +178,7 @@ private:
 
     std::unique_ptr<PrefetchCache> prefetch;
 };
+
+using S3RandomAccessFilePtr = std::shared_ptr<S3RandomAccessFile>;
 
 } // namespace DB::S3

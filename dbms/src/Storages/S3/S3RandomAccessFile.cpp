@@ -129,6 +129,13 @@ bool isRetryableError(int e)
     return e == ECONNRESET || e == EAGAIN;
 }
 
+size_t S3RandomAccessFile::getPos() const {
+    if (prefetch != nullptr) {
+        return cur_offset - prefetch->unreadBytes();
+    }
+    return cur_offset;
+}
+
 ssize_t S3RandomAccessFile::read(char * buf, size_t size)
 {
     while (true)

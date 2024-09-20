@@ -30,6 +30,20 @@ Page CPWriteDataSourceBlobStore::read(const BlobStore<universal::BlobStoreTrait>
     }
 }
 
+std::tuple<Page, S3::S3RandomAccessFilePtr> CPWriteDataSourceBlobStore::readWithFile(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & page_id_and_entry, S3::S3RandomAccessFilePtr file)
+{
+    if (page_id_and_entry.second.checkpoint_info.has_value()
+        && page_id_and_entry.second.checkpoint_info.is_local_data_reclaimed)
+    {
+        return remote_reader->readWithS3File(page_id_and_entry, file);
+    }
+    else
+    {
+        return std::make_tuple(blob_store.read(page_id_and_entry), nullptr);
+    }
+}
+
+
 Page CPWriteDataSourceFixture::read(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & id_and_entry)
 {
     auto it = data.find(id_and_entry.second.offset);
