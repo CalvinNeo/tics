@@ -34,7 +34,7 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const U
     auto remote_name_view = S3::S3FilenameView::fromKey(remote_name);
     S3::S3RandomAccessFilePtr s3_remote_file;
     auto s3_client = S3::ClientFactory::instance().sharedTiFlashClient();
-    if (file == nullptr || location.offset_in_file >= file->getPos()) {
+    if (file == nullptr || location.offset_in_file <= file->getPos()) {
     #ifdef DBMS_PUBLIC_GTEST
         if (remote_name_view.isLockFile())
         {
