@@ -52,6 +52,7 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const U
         s3_remote_file = file;
     }
 
+    RUNTIME_CHECK(s3_remote_file != nullptr);
     RandomAccessFilePtr remote_file = s3_remote_file;
     ReadBufferFromRandomAccessFile buf(remote_file);
 
