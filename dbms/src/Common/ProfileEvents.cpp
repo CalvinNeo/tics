@@ -130,6 +130,7 @@
     M(S3ReadBytes)                             \
     M(S3CachedReadBytes)                       \
     M(S3CachedSkipBytes)                       \
+    M(S3PageReaderReusedFile)                  \
     M(S3CreateMultipartUpload)                 \
     M(S3UploadPart)                            \
     M(S3CompleteMultipartUpload)               \

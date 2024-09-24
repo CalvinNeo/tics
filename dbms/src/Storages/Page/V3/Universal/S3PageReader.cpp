@@ -19,6 +19,10 @@
 #include <Storages/S3/S3Filename.h>
 #include <Storages/S3/S3RandomAccessFile.h>
 
+namespace ProfileEvents {
+extern const Event S3PageReaderReusedFile;
+}
+
 namespace DB::PS::V3
 {
 Page S3PageReader::read(const UniversalPageIdAndEntry & page_id_and_entry)
@@ -49,6 +53,7 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const U
         }
     #endif
     } else {
+        ProfileEvents::increment(ProfileEvents::S3PageReaderReusedFile, 1);
         s3_remote_file = file;
     }
 
