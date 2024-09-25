@@ -130,6 +130,7 @@ public:
     ssize_t read(char * buf, size_t size) override;
 
     std::string getFileName() const override;
+    std::string getRemoteFileName() const;
 
     ssize_t pread(char * /*buf*/, size_t /*size*/, off_t /*offset*/) const override
     {

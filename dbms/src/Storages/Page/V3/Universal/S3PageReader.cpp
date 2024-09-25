@@ -40,9 +40,9 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const U
     auto remote_name_view = S3::S3FilenameView::fromKey(remote_name);
     S3::S3RandomAccessFilePtr s3_remote_file;
     auto s3_client = S3::ClientFactory::instance().sharedTiFlashClient();
-    if (file == nullptr || location.offset_in_file <= file->getPos()) {
+    if (file == nullptr || location.offset_in_file <= file->getPos() || remote_name != file->getRemoteFileName()) {
         if (file != nullptr && location.offset_in_file <= file->getPos()) {
-            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored! {} {} {}", location.offset_in_file, file->getPos(), file->getPrefetchedSize());
+            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored1! {} {} {} location.size_in_file {}", location.offset_in_file, file->getPos(), file->getPrefetchedSize(), location.size_in_file);
             ProfileEvents::increment(ProfileEvents::S3PageReaderNotReusedFile1, 1);
         }
         else
@@ -70,6 +70,7 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const U
     ReadBufferFromRandomAccessFile buf(remote_file);
 
     buf.seek(location.offset_in_file, SEEK_SET);
+    LOG_DEBUG(DB::Logger::get(), "!!!!! read befored2! {} {} {} location.size_in_file {}", location.offset_in_file, file->getPos(), file->getPrefetchedSize(), location.size_in_file);
     auto buf_size = location.size_in_file;
     RUNTIME_CHECK(buf_size != 0, page_id_and_entry);
     char * data_buf = static_cast<char *>(alloc(buf_size));

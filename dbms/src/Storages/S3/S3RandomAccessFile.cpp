@@ -124,6 +124,11 @@ std::string S3RandomAccessFile::getFileName() const
     return fmt::format("{}/{}", client_ptr->bucket(), remote_fname);
 }
 
+std::string S3RandomAccessFile::getRemoteFileName() const
+{
+    return remote_fname;
+}
+
 bool isRetryableError(int e)
 {
     return e == ECONNRESET || e == EAGAIN;
