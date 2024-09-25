@@ -21,6 +21,8 @@
 
 namespace ProfileEvents {
 extern const Event S3PageReaderReusedFile;
+extern const Event S3PageReaderNotReusedFile1;
+extern const Event S3PageReaderNotReusedFile2;
 }
 
 namespace DB::PS::V3
@@ -39,6 +41,12 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const U
     S3::S3RandomAccessFilePtr s3_remote_file;
     auto s3_client = S3::ClientFactory::instance().sharedTiFlashClient();
     if (file == nullptr || location.offset_in_file <= file->getPos()) {
+        if (location.offset_in_file <= file->getPos()) {
+            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored! {} {} {}", location.offset_in_file, file->getPos(), file->getPrefetchedSize());
+            ProfileEvents::increment(ProfileEvents::S3PageReaderNotReusedFile1, 1);
+        }
+        else
+            ProfileEvents::increment(ProfileEvents::S3PageReaderNotReusedFile2, 1);
     #ifdef DBMS_PUBLIC_GTEST
         if (remote_name_view.isLockFile())
         {

@@ -192,7 +192,7 @@ CPDataDumpStats CPFilesWriter::writeEditsAndApplyCheckpointInfo(
         Stopwatch sw;
         try
         {
-            auto [page, s3file] = data_source->readWithFile({rec_edit.page_id, rec_edit.entry}, current_s3file);
+            auto [page, s3file] = data_source->readWithS3File({rec_edit.page_id, rec_edit.entry}, current_s3file);
             current_s3file = s3file;
             RUNTIME_CHECK_MSG(
                 page.isValid(),

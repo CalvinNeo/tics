@@ -136,6 +136,13 @@ size_t S3RandomAccessFile::getPos() const {
     return cur_offset;
 }
 
+size_t S3RandomAccessFile::getPrefetchedSize() const {
+    if (prefetch != nullptr) {
+        return prefetch->getCachedSize();
+    }
+    return 0;
+}
+
 ssize_t S3RandomAccessFile::read(char * buf, size_t size)
 {
     while (true)

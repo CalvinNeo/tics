@@ -98,6 +98,7 @@ struct PrefetchCache
     }
     bool needsRefill() const { return pos >= buffer_limit; }
     size_t unreadBytes() const { return buffer_limit - pos; }
+    size_t getCachedSize() const { return buffer_limit; }
 
 private:
     UInt32 hit_limit;
@@ -121,6 +122,7 @@ public:
     S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_ptr_, const String & remote_fname_);
 
     size_t getPos() const;
+    size_t getPrefetchedSize() const;
 
     // Can only seek forward.
     off_t seek(off_t offset, int whence) override;

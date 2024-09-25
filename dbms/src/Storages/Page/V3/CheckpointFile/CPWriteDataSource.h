@@ -30,7 +30,7 @@ public:
 
     virtual Page read(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry &) = 0;
 
-    virtual std::tuple<Page, S3::S3RandomAccessFilePtr> readWithFile(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & page_id_and_entry, S3::S3RandomAccessFilePtr file) = 0;
+    virtual std::tuple<Page, S3::S3RandomAccessFilePtr> readWithS3File(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & page_id_and_entry, S3::S3RandomAccessFilePtr file) = 0;
 };
 
 using CPWriteDataSourcePtr = std::shared_ptr<CPWriteDataSource>;
@@ -57,7 +57,7 @@ public:
     }
 
     Page read(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & page_id_and_entry) override;
-    std::tuple<Page, S3::S3RandomAccessFilePtr> readWithFile(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & page_id_and_entry, S3::S3RandomAccessFilePtr file) override;
+    std::tuple<Page, S3::S3RandomAccessFilePtr> readWithS3File(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & page_id_and_entry, S3::S3RandomAccessFilePtr file) override;
 
 private:
     BlobStore<universal::BlobStoreTrait> & blob_store;
@@ -81,7 +81,7 @@ public:
     }
 
     Page read(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & id_and_entry) override;
-    std::tuple<Page, S3::S3RandomAccessFilePtr> readWithFile(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry &, S3::S3RandomAccessFilePtr) override {
+    std::tuple<Page, S3::S3RandomAccessFilePtr> readWithS3File(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry &, S3::S3RandomAccessFilePtr) override {
         RUNTIME_CHECK(false);
     }
 private:

@@ -30,7 +30,7 @@ Page CPWriteDataSourceBlobStore::read(const BlobStore<universal::BlobStoreTrait>
     }
 }
 
-std::tuple<Page, S3::S3RandomAccessFilePtr> CPWriteDataSourceBlobStore::readWithFile(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & page_id_and_entry, S3::S3RandomAccessFilePtr file)
+std::tuple<Page, S3::S3RandomAccessFilePtr> CPWriteDataSourceBlobStore::readWithS3File(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & page_id_and_entry, S3::S3RandomAccessFilePtr file)
 {
     if (page_id_and_entry.second.checkpoint_info.has_value()
         && page_id_and_entry.second.checkpoint_info.is_local_data_reclaimed)
