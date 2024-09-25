@@ -77,6 +77,7 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const U
     MemHolder mem_holder = createMemHolder(data_buf, [&, buf_size](char * p) { free(p, buf_size); });
     // TODO: support checksum verification
     buf.readStrict(data_buf, buf_size);
+    LOG_DEBUG(DB::Logger::get(), "!!!!! read befored3! {} {} {} location.size_in_file {}", location.offset_in_file, file->getPos(), file->getPrefetchedSize(), location.size_in_file);
     Page page{UniversalPageIdFormat::getU64ID(page_id_and_entry.first)};
     page.data = std::string_view(data_buf, buf_size);
     page.mem_holder = mem_holder;
