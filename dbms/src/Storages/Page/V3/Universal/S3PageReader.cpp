@@ -47,7 +47,7 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const U
         }
         else
         {
-            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored1.2! {} {} {} location.size_in_file {} remote_name={}", location.offset_in_file, file->getPos(), file->getPrefetchedSize(), location.size_in_file, remote_name);
+            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored1.2! {} location.size_in_file {} remote_name={}", location.offset_in_file, location.size_in_file, remote_name);
             ProfileEvents::increment(ProfileEvents::S3PageReaderNotReusedFile2, 1);
         }
     #ifdef DBMS_PUBLIC_GTEST
