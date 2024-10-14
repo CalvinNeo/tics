@@ -38,23 +38,24 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const U
     auto location = page_entry.checkpoint_info.data_location;
     const auto & remote_name = *location.data_file_id;
     auto remote_name_view = S3::S3FilenameView::fromKey(remote_name);
+    auto physical_filename = remote_name_view.asDataFile().toFullKey();
     S3::S3RandomAccessFilePtr s3_remote_file;
     auto s3_client = S3::ClientFactory::instance().sharedTiFlashClient();
-    if (file == nullptr || location.offset_in_file <= file->getPos() || remote_name != file->getRemoteFileName()) {
+    if (file == nullptr || location.offset_in_file <= file->getPos() || physical_filename != file->getRemoteFileName()) {
         if (file == nullptr) {
-            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored1.2! {} location.size_in_file {} remote_name={}", location.offset_in_file, location.size_in_file, remote_name);
+            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored1.2! {} location.size_in_file {} remote_name={} filename={}", location.offset_in_file, location.size_in_file, remote_name, file->getRemoteFileName());
             ProfileEvents::increment(ProfileEvents::S3PageReaderNotReusedFile1, 1);
         }
         else
         {
-            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored1.1! {} {} {} location.size_in_file {} remote_name={}", location.offset_in_file, file->getPos(), file->getPrefetchedSize(), location.size_in_file, remote_name);
+            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored1.1! {} {} {} location.size_in_file {} remote_name={} filename={} physical_filename={}", location.offset_in_file, file->getPos(), file->getPrefetchedSize(), location.size_in_file, remote_name, file->getRemoteFileName(), physical_filename);
             ProfileEvents::increment(ProfileEvents::S3PageReaderNotReusedFile2, 1);
         }
     #ifdef DBMS_PUBLIC_GTEST
         if (remote_name_view.isLockFile())
         {
     #endif
-            s3_remote_file = std::make_shared<S3::S3RandomAccessFile>(s3_client, remote_name_view.asDataFile().toFullKey());
+            s3_remote_file = std::make_shared<S3::S3RandomAccessFile>(s3_client, physical_filename);
     #ifdef DBMS_PUBLIC_GTEST
         }
         else
