@@ -42,12 +42,12 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const U
     auto s3_client = S3::ClientFactory::instance().sharedTiFlashClient();
     if (file == nullptr || location.offset_in_file <= file->getPos() || remote_name != file->getRemoteFileName()) {
         if (file == nullptr) {
-            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored1.1! {} {} {} location.size_in_file {} remote_name={}", location.offset_in_file, file->getPos(), file->getPrefetchedSize(), location.size_in_file, remote_name);
+            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored1.2! {} location.size_in_file {} remote_name={}", location.offset_in_file, location.size_in_file, remote_name);
             ProfileEvents::increment(ProfileEvents::S3PageReaderNotReusedFile1, 1);
         }
         else
         {
-            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored1.2! {} location.size_in_file {} remote_name={}", location.offset_in_file, location.size_in_file, remote_name);
+            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored1.1! {} {} {} location.size_in_file {} remote_name={}", location.offset_in_file, file->getPos(), file->getPrefetchedSize(), location.size_in_file, remote_name);
             ProfileEvents::increment(ProfileEvents::S3PageReaderNotReusedFile2, 1);
         }
     #ifdef DBMS_PUBLIC_GTEST
