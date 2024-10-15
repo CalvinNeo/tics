@@ -138,11 +138,11 @@ size_t PrefetchCache::skip(size_t ignore_count) {
 }
 
 String PrefetchCache::summary() const {
-    return fmt::format("hit_count={} hit_limit={} buffer_limit={} direct_read={} cache_read={}", hit_count, hit_limit, buffer_limit, direct_read, cache_read);
+    return fmt::format("hit_count={} hit_limit={} buffer_limit={} direct_read={} cache_read={} pos={}", hit_count, hit_limit, buffer_limit, direct_read, cache_read, pos);
 }
 
 String S3RandomAccessFile::summary() const {
-    return fmt::format("prefetch=() remote_fname={} cur_offset={} cur_retry={}", prefetch == nullptr ? "" : prefetch->summary(), remote_fname, cur_offset, cur_retry);
+    return fmt::format("prefetch=({}) remote_fname={} cur_offset={} cur_retry={}", prefetch == nullptr ? "" : prefetch->summary(), remote_fname, cur_offset, cur_retry);
 }
 
 S3RandomAccessFile::S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_ptr_, const String & remote_fname_)
