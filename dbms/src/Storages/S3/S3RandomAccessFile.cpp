@@ -40,6 +40,35 @@ extern const Event S3CachedSkip;
 
 namespace DB::S3
 {
+PrefetchCache::PrefetchRes PrefetchCache::maybePrefetch()
+{
+    if (eof)
+    {
+        return PrefetchRes::NeedNot;
+    }
+    if (pos >= buffer_limit)
+    {
+        write_buffer.reserve(buffer_size);
+        // TODO Check if it is OK to read when the rest of the chars are less than size.
+        auto res = read_func(write_buffer.data(), buffer_size);
+        if (res < 0)
+        {
+            // Error state.
+            eof = true;
+            pos = 0;
+            buffer_limit = 0;
+        }
+        else
+        {
+            // If we actually got some data.
+            pos = 0;
+            buffer_limit = res;
+        }
+        return PrefetchRes::Ok;
+    }
+    return PrefetchRes::NeedNot;
+}
+
 // - If the read is filled entirely by cache, then we will return the "gcount" of the cache.
 // - If the read is filled by both the cache and `read_func`,
 //   + If the read_func returns a positive number, we will add the contribution of the cache, and then return.
@@ -108,6 +137,14 @@ size_t PrefetchCache::skip(size_t ignore_count) {
     }
 }
 
+String PrefetchCache::summary() const {
+    return fmt::format("hit_count={} hit_limit={} buffer_limit={} direct_read={} cache_read={}", hit_count, hit_limit, buffer_limit, direct_read, cache_read);
+}
+
+String S3RandomAccessFile::summary() const {
+    return fmt::format("prefetch=() remote_fname={} cur_offset={} cur_retry={}", prefetch == nullptr ? "" : prefetch->summary(), remote_fname, cur_offset, cur_retry);
+}
+
 S3RandomAccessFile::S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_ptr_, const String & remote_fname_)
     : client_ptr(std::move(client_ptr_))
     , remote_fname(remote_fname_)
@@ -147,6 +184,7 @@ size_t S3RandomAccessFile::getPrefetchedSize() const {
     }
     return 0;
 }
+
 
 ssize_t S3RandomAccessFile::read(char * buf, size_t size)
 {

@@ -62,33 +62,7 @@ struct PrefetchCache
         Ok,
     };
 
-    PrefetchRes maybePrefetch()
-    {
-        if (eof)
-        {
-            return PrefetchRes::NeedNot;
-        }
-        if (pos >= buffer_limit)
-        {
-            write_buffer.reserve(buffer_size);
-            // TODO Check if it is OK to read when the rest of the chars are less than size.
-            auto res = read_func(write_buffer.data(), buffer_size);
-            if (res < 0)
-            {
-                // Error state.
-                eof = true;
-                pos = 0;
-                buffer_limit = 0;
-            }
-            else
-            {
-                // If we actually got some data.
-                pos = 0;
-                buffer_limit = res;
-            }
-        }
-        return PrefetchRes::NeedNot;
-    }
+    PrefetchRes maybePrefetch();
 
     size_t getCacheRead() const { return cache_read; }
     size_t getDirectRead() const { return direct_read; }
@@ -99,6 +73,8 @@ struct PrefetchCache
     bool needsRefill() const { return pos >= buffer_limit; }
     size_t unreadBytes() const { return buffer_limit - pos; }
     size_t getCachedSize() const { return buffer_limit; }
+    bool activated() const { return hit_count >= hit_limit; }
+    String summary() const;
 
 private:
     UInt32 hit_limit;
@@ -154,6 +130,8 @@ public:
         read_file_info = std::move(read_file_info_);
         return ext::make_scope_guard([]() { read_file_info.reset(); });
     }
+
+    String summary() const;
 
 private:
     bool initialize();
