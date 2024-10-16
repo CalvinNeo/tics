@@ -50,7 +50,7 @@ struct PrefetchCache
         , read_func(read_func_)
         , buffer_size(buffer_size_)
     {
-        pos = buffer_size;
+        pos = buffer_limit;
     }
 
     ssize_t read(char * buf, size_t size);
