@@ -72,11 +72,12 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const U
 
     RUNTIME_CHECK(s3_remote_file != nullptr);
     RandomAccessFilePtr remote_file = s3_remote_file;
-    ReadBufferFromRandomAccessFile buf(remote_file);
+    auto buf_size = location.size_in_file;
+    // We must disable prefetch in this buffer, otherwise the file could not be reused in sequencial read order.
+    ReadBufferFromRandomAccessFile buf(remote_file, buf_size);
 
     buf.seek(location.offset_in_file, SEEK_SET);
-    LOG_DEBUG(DB::Logger::get(), "!!!!! read befored2! want {} filepos {} prefsize {} location.size_in_file {} sum={}", location.offset_in_file, s3_remote_file->getPos(), s3_remote_file->getPrefetchedSize(), location.size_in_file, s3_remote_file->summary());
-    auto buf_size = location.size_in_file;
+    LOG_DEBUG(DB::Logger::get(), "!!!!! read befored2! want {} filepos {} prefsize {} location.size_in_file {} sum={} buf_size={}", location.offset_in_file, s3_remote_file->getPos(), s3_remote_file->getPrefetchedSize(), location.size_in_file, s3_remote_file->summary(), buf_size);
     RUNTIME_CHECK(buf_size != 0, page_id_and_entry);
     char * data_buf = static_cast<char *>(alloc(buf_size));
     MemHolder mem_holder = createMemHolder(data_buf, [&, buf_size](char * p) { free(p, buf_size); });
