@@ -19,20 +19,23 @@
 #include <Storages/S3/S3Filename.h>
 #include <Storages/S3/S3RandomAccessFile.h>
 
-namespace ProfileEvents {
+namespace ProfileEvents
+{
 extern const Event S3PageReaderReusedFile;
-extern const Event S3PageReaderNotReusedFile1;
-extern const Event S3PageReaderNotReusedFile2;
-}
+extern const Event S3PageReaderNotReusedFile;
+} // namespace ProfileEvents
 
 namespace DB::PS::V3
 {
 Page S3PageReader::read(const UniversalPageIdAndEntry & page_id_and_entry)
 {
-    return std::get<0>(readWithS3File(page_id_and_entry, nullptr));
+    return std::get<0>(readFromS3File(page_id_and_entry, nullptr));
 }
 
-std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const UniversalPageIdAndEntry & page_id_and_entry, S3::S3RandomAccessFilePtr file) {
+std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readFromS3File(
+    const UniversalPageIdAndEntry & page_id_and_entry,
+    S3::S3RandomAccessFilePtr file)
+{
     const auto & page_entry = page_id_and_entry.second;
     RUNTIME_CHECK(page_entry.checkpoint_info.has_value());
     auto location = page_entry.checkpoint_info.data_location;
@@ -41,31 +44,25 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const U
     auto physical_filename = remote_name_view.asDataFile().toFullKey();
     S3::S3RandomAccessFilePtr s3_remote_file;
     auto s3_client = S3::ClientFactory::instance().sharedTiFlashClient();
-    if (file == nullptr || location.offset_in_file <= file->getPos() || physical_filename != file->getRemoteFileName()) {
-        if (file == nullptr) {
-            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored1.2! {} location.size_in_file {} remote_name={}", location.offset_in_file, location.size_in_file, remote_name);
-            ProfileEvents::increment(ProfileEvents::S3PageReaderNotReusedFile1, 1);
-        }
-        else
-        {
-            LOG_DEBUG(DB::Logger::get(), "!!!!! read befored1.1! want {} filepos {} prefsize {} location.size_in_file {} remote_name={} physical_filename={} sum={}", 
-                location.offset_in_file, file->getPos(), file->getPrefetchedSize(), location.size_in_file, remote_name, physical_filename, file->summary());
-            ProfileEvents::increment(ProfileEvents::S3PageReaderNotReusedFile2, 1);
-        }
-    #ifdef DBMS_PUBLIC_GTEST
+    if (file == nullptr || location.offset_in_file <= file->getPos() || physical_filename != file->getRemoteFileName())
+    {
+        ProfileEvents::increment(ProfileEvents::S3PageReaderNotReusedFile, 1);
+#ifdef DBMS_PUBLIC_GTEST
         if (remote_name_view.isLockFile())
         {
-    #endif
+#endif
             s3_remote_file = std::make_shared<S3::S3RandomAccessFile>(s3_client, physical_filename);
-    #ifdef DBMS_PUBLIC_GTEST
+#ifdef DBMS_PUBLIC_GTEST
         }
         else
         {
             // Just used in unit test which want to just focus on read write logic
             s3_remote_file = std::make_shared<S3::S3RandomAccessFile>(s3_client, *location.data_file_id);
         }
-    #endif
-    } else {
+#endif
+    }
+    else
+    {
         ProfileEvents::increment(ProfileEvents::S3PageReaderReusedFile, 1);
         s3_remote_file = file;
     }
@@ -77,13 +74,11 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readWithS3File(const U
     ReadBufferFromRandomAccessFile buf(remote_file, buf_size);
 
     buf.seek(location.offset_in_file, SEEK_SET);
-    LOG_DEBUG(DB::Logger::get(), "!!!!! read befored2! want {} filepos {} prefsize {} location.size_in_file {} sum={} buf_size={}", location.offset_in_file, s3_remote_file->getPos(), s3_remote_file->getPrefetchedSize(), location.size_in_file, s3_remote_file->summary(), buf_size);
     RUNTIME_CHECK(buf_size != 0, page_id_and_entry);
     char * data_buf = static_cast<char *>(alloc(buf_size));
     MemHolder mem_holder = createMemHolder(data_buf, [&, buf_size](char * p) { free(p, buf_size); });
     // TODO: support checksum verification
     buf.readStrict(data_buf, buf_size);
-    LOG_DEBUG(DB::Logger::get(), "!!!!! read befored3! want {} filepos {} prefsize {} location.size_in_file {} sum={}", location.offset_in_file, s3_remote_file->getPos(), s3_remote_file->getPrefetchedSize(), location.size_in_file, s3_remote_file->summary());
     Page page{UniversalPageIdFormat::getU64ID(page_id_and_entry.first)};
     page.data = std::string_view(data_buf, buf_size);
     page.mem_holder = mem_holder;
