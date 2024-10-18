@@ -47,7 +47,7 @@
 #include <Storages/DeltaMerge/Filter/PushDownFilter.h>
 #include <Storages/DeltaMerge/Filter/RSOperator.h>
 #include <Storages/DeltaMerge/FilterParser/FilterParser.h>
-#include <Storages/DeltaMerge/Index/IndexInfo.h>
+#include <Storages/DeltaMerge/Index/LocalIndexInfo.h>
 #include <Storages/DeltaMerge/Index/VectorIndex.h>
 #include <Storages/DeltaMerge/Remote/DisaggSnapshot.h>
 #include <Storages/KVStore/Region.h>
@@ -1220,11 +1220,13 @@ UInt64 StorageDeltaMerge::ingestFiles(
 }
 
 DM::Segments StorageDeltaMerge::buildSegmentsFromCheckpointInfo(
+    const std::shared_ptr<GeneralCancelHandle> & cancel_handle,
     const DM::RowKeyRange & range,
     CheckpointInfoPtr checkpoint_info,
     const Settings & settings)
 {
-    return getAndMaybeInitStore()->buildSegmentsFromCheckpointInfo(global_context, settings, range, checkpoint_info);
+    return getAndMaybeInitStore()
+        ->buildSegmentsFromCheckpointInfo(global_context, cancel_handle, settings, range, checkpoint_info);
 }
 
 UInt64 StorageDeltaMerge::ingestSegmentsFromCheckpointInfo(
@@ -1562,16 +1564,24 @@ void StorageDeltaMerge::alterSchemaChange(
     LOG_DEBUG(log, "Update table_info: {} => {}", tidb_table_info.serialize(), table_info.serialize());
 
     {
-        std::lock_guard lock(store_mutex); // Avoid concurrent init store and DDL.
+        // In order to avoid concurrent issue between init store and DDL,
+        // we must acquire the lock before schema changes is applied.
+        std::lock_guard lock(store_mutex);
         if (storeInited())
         {
             _store->applySchemaChanges(table_info);
         }
-        else // it seems we will never come into this branch ?
+        else
         {
+            // If there is no data need to be stored for this table, the _store instance
+            // is not inited to reduce fragmentation files that may exhaust the inode of
+            // disk.
+            // Under this case, we update some in-memory variables to ensure the correctness.
             updateTableColumnInfo();
         }
     }
+
+    // Should generate new decoding snapshot and cache block
     decoding_schema_changed = true;
 
     SortDescription pk_desc = getPrimarySortDescription();
