@@ -71,6 +71,8 @@ namespace DB
     M(force_remote_read_for_batch_cop_once)                       \
     M(exception_new_dynamic_thread)                               \
     M(force_wait_index_timeout)                                   \
+    M(force_local_index_task_memory_limit_exceeded)               \
+    M(exception_build_local_index_for_file)                       \
     M(force_not_support_vector_index)                             \
     M(sync_schema_request_failure)
 
@@ -145,6 +147,7 @@ namespace DB
     M(pause_before_prehandle_subtask)     \
     M(pause_when_persist_region)          \
     M(pause_before_wn_establish_task)     \
+    M(pause_when_building_fap_segments)   \
     M(pause_passive_flush_before_persist_region)
 
 #define APPLY_FOR_RANDOM_FAILPOINTS(M)                       \

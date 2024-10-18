@@ -145,6 +145,8 @@
     M(S3CachedSkip)                            \
     M(S3GetObjectRetry)                        \
     M(S3PutObjectRetry)                        \
+    M(S3IORead)                                \
+    M(S3IOSeek)                                \
     M(FileCacheHit)                            \
     M(FileCacheMiss)                           \
     M(FileCacheEvict)                          \

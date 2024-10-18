@@ -27,7 +27,7 @@
 #include <Storages/DeltaMerge/DeltaMergeDefines.h>
 #include <Storages/DeltaMerge/DeltaMergeInterfaces.h>
 #include <Storages/DeltaMerge/Filter/PushDownFilter.h>
-#include <Storages/DeltaMerge/Index/IndexInfo.h>
+#include <Storages/DeltaMerge/Index/LocalIndexInfo.h>
 #include <Storages/DeltaMerge/Remote/DisaggSnapshot_fwd.h>
 #include <Storages/DeltaMerge/RowKeyRange.h>
 #include <Storages/DeltaMerge/ScanContext_fwd.h>
@@ -42,6 +42,8 @@
 
 namespace DB
 {
+struct GeneralCancelHandle;
+struct Settings;
 
 class Logger;
 using LoggerPtr = std::shared_ptr<Logger>;
@@ -72,6 +74,7 @@ using NotCompress = std::unordered_set<ColId>;
 using SegmentIdSet = std::unordered_set<UInt64>;
 struct ExternalDTFileInfo;
 struct GCOptions;
+struct LocalIndexBuildInfo;
 
 namespace tests
 {
@@ -186,6 +189,9 @@ struct LocalIndexStats
     UInt64 rows_stable_not_indexed{}; // Total rows
     UInt64 rows_delta_indexed{}; // Total rows
     UInt64 rows_delta_not_indexed{}; // Total rows
+
+    // If the index is finally failed to be built, then this is not empty
+    String error_message{};
 };
 using LocalIndexesStats = std::vector<LocalIndexStats>;
 
@@ -388,17 +394,19 @@ public:
 
     Segments buildSegmentsFromCheckpointInfo(
         const DMContextPtr & dm_context,
+        const std::shared_ptr<GeneralCancelHandle> & cancel_handle,
         const DM::RowKeyRange & range,
         const CheckpointInfoPtr & checkpoint_info) const;
 
     Segments buildSegmentsFromCheckpointInfo(
         const Context & db_context,
+        const std::shared_ptr<GeneralCancelHandle> & cancel_handle,
         const DB::Settings & db_settings,
         const DM::RowKeyRange & range,
         const CheckpointInfoPtr & checkpoint_info)
     {
         auto dm_context = newDMContext(db_context, db_settings);
-        return buildSegmentsFromCheckpointInfo(dm_context, range, checkpoint_info);
+        return buildSegmentsFromCheckpointInfo(dm_context, cancel_handle, range, checkpoint_info);
     }
 
     UInt64 ingestSegmentsFromCheckpointInfo(
@@ -564,7 +572,10 @@ public:
 
     StoreStats getStoreStats();
     SegmentsStats getSegmentsStats();
+
     LocalIndexesStats getLocalIndexStats();
+    // Generate local index stats for non inited DeltaMergeStore
+    static std::optional<LocalIndexesStats> genLocalIndexStatsByTableInfo(const TiDB::TableInfo & table_info);
 
     bool isCommonHandle() const { return is_common_handle; }
     size_t getRowKeyColumnSize() const { return rowkey_column_size; }
@@ -723,11 +734,9 @@ private:
         MergeDeltaReason reason,
         SegmentSnapshotPtr segment_snap = nullptr);
 
-    void segmentEnsureStableIndex(
-        DMContext & dm_context,
-        const LocalIndexInfosPtr & index_info,
-        const DMFiles & dm_files,
-        const String & source_segment_info);
+    void segmentEnsureStableIndex(DMContext & dm_context, const LocalIndexBuildInfo & index_build_info);
+
+    void segmentEnsureStableIndexWithErrorReport(DMContext & dm_context, const LocalIndexBuildInfo & index_build_info);
 
     /**
      * Ingest a DMFile into the segment, optionally causing a new segment being created.
@@ -870,8 +879,9 @@ private:
 
     /**
      * Check whether there are new local indexes should be built for all segments.
+     * If dropped_indexes is not empty, try to cleanup the dropped_indexes
      */
-    void checkAllSegmentsLocalIndex();
+    void checkAllSegmentsLocalIndex(std::vector<IndexID> && dropped_indexes);
 
     /**
      * Ensure the segment has stable index.

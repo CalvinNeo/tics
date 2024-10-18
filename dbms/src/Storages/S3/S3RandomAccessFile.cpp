@@ -36,6 +36,8 @@ extern const Event S3CachedReadBytes;
 extern const Event S3CachedSkipBytes;
 extern const Event S3CachedRead;
 extern const Event S3CachedSkip;
+extern const Event S3IORead;
+extern const Event S3IOSeek;
 } // namespace ProfileEvents
 
 namespace DB::S3
@@ -206,6 +208,7 @@ ssize_t S3RandomAccessFile::read(char * buf, size_t size)
 ssize_t S3RandomAccessFile::readImpl(char * buf, size_t size)
 {
     Stopwatch sw;
+    ProfileEvents::increment(ProfileEvents::S3IORead, 1);
     auto & istr = read_result.GetBody();
     istr.read(buf, size);
     size_t gcount = istr.gcount();
@@ -275,6 +278,7 @@ off_t S3RandomAccessFile::seekImpl(off_t offset_, int whence)
         return cur_offset;
     }
     Stopwatch sw;
+    ProfileEvents::increment(ProfileEvents::S3IOSeek, 1);
     auto & istr = read_result.GetBody();
     auto ignore_count = offset_ - cur_offset;
     auto direct_ignore_count = prefetch->skip(ignore_count);
