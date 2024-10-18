@@ -84,7 +84,7 @@ ssize_t PrefetchCache::read(char * buf, size_t size)
         return read_func(buf, size);
     }
     maybePrefetch();
-    if (pos + size > buffer_limit)
+    if (pos + size >= buffer_limit)
     {
         // No enough data in cache.
         auto read_from_cache = buffer_limit - pos;
@@ -119,7 +119,7 @@ size_t PrefetchCache::skip(size_t ignore_count) {
     }
     if (ignore_count == 0) return 0;
     maybePrefetch();
-    if (pos + ignore_count > buffer_limit)
+    if (pos + ignore_count >= buffer_limit)
     {
         // No enough data in cache.
         auto read_from_cache = buffer_limit - pos;
@@ -145,11 +145,12 @@ String S3RandomAccessFile::summary() const {
     return fmt::format("prefetch=({}) remote_fname={} cur_offset={} cur_retry={}", prefetch == nullptr ? "" : prefetch->summary(), remote_fname, cur_offset, cur_retry);
 }
 
-S3RandomAccessFile::S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_ptr_, const String & remote_fname_)
+S3RandomAccessFile::S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_ptr_, const String & remote_fname_, size_t prefetch_limit_)
     : client_ptr(std::move(client_ptr_))
     , remote_fname(remote_fname_)
     , cur_offset(0)
     , log(Logger::get(remote_fname))
+    , prefetch_limit(prefetch_limit_)
 {
     RUNTIME_CHECK(client_ptr != nullptr);
     RUNTIME_CHECK(initialize(), remote_fname);
@@ -188,6 +189,7 @@ size_t S3RandomAccessFile::getPrefetchedSize() const {
 
 ssize_t S3RandomAccessFile::read(char * buf, size_t size)
 {
+    RUNTIME_CHECK(prefetch != nullptr);
     while (true)
     {
         auto n = prefetch->read(buf, size);
@@ -263,20 +265,25 @@ off_t S3RandomAccessFile::seek(off_t offset_, int whence)
 off_t S3RandomAccessFile::seekImpl(off_t offset_, int whence)
 {
     RUNTIME_CHECK_MSG(whence == SEEK_SET, "Only SEEK_SET mode is allowed, but {} is received", whence);
-    RUNTIME_CHECK_MSG(
-        offset_ >= cur_offset && offset_ <= content_length,
-        "Seek position is out of bounds: offset={}, cur_offset={}, content_length={}",
-        offset_,
-        cur_offset,
-        content_length);
+    RUNTIME_CHECK(prefetch != nullptr);
+    RUNTIME_CHECK(offset_ >= 0);
+    size_t off = static_cast<size_t>(offset_);
 
-    if (offset_ == cur_offset)
+    RUNTIME_CHECK_MSG(
+        off >= getPos() && offset_ <= content_length,
+        "Seek position is out of bounds: offset={}, content_length={}, summary={}",
+        off,
+        cur_offset,
+        content_length,
+        summary());
+
+    if (off == getPos())
     {
-        return cur_offset;
+        return getPos();
     }
     Stopwatch sw;
     auto & istr = read_result.GetBody();
-    auto ignore_count = offset_ - cur_offset;
+    auto ignore_count = off - getPos();
     auto direct_ignore_count = prefetch->skip(ignore_count);
     if (!istr.ignore(direct_ignore_count))
     {
@@ -315,7 +322,7 @@ bool S3RandomAccessFile::initialize()
         LOG_INFO(log, "S3 revert cache {}", to_revert);
         cur_offset -= to_revert;
     }
-    prefetch = std::make_unique<PrefetchCache>(10, std::bind(&S3RandomAccessFile::readImpl, this, std::placeholders::_1, std::placeholders::_2), 5 * 1024 * 1024);
+    prefetch = std::make_unique<PrefetchCache>(prefetch_limit, std::bind(&S3RandomAccessFile::readImpl, this, std::placeholders::_1, std::placeholders::_2), 5 * 1024 * 1024);
     Aws::S3::Model::GetObjectRequest req;
     req.SetRange(readRangeOfObject());
     client_ptr->setBucketAndKeyWithRoot(req, remote_fname);

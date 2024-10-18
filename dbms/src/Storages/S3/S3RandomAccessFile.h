@@ -95,7 +95,7 @@ class S3RandomAccessFile final : public RandomAccessFile
 public:
     static RandomAccessFilePtr create(const String & remote_fname);
 
-    S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_ptr_, const String & remote_fname_);
+    S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_ptr_, const String & remote_fname_, size_t prefetch_limit_ = 10);
 
     size_t getPos() const;
     size_t getPrefetchedSize() const;
@@ -132,6 +132,7 @@ public:
     }
 
     String summary() const;
+    const PrefetchCache * debugPrefetchCache() const { return prefetch.get(); }
 
 private:
     bool initialize();
@@ -158,6 +159,7 @@ private:
     static constexpr Int32 max_retry = 3;
 
     std::unique_ptr<PrefetchCache> prefetch;
+    size_t prefetch_limit;
 };
 
 using S3RandomAccessFilePtr = std::shared_ptr<S3RandomAccessFile>;

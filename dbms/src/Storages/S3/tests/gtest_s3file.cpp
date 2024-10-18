@@ -256,6 +256,71 @@ try
 }
 CATCH
 
+TEST_F(S3FileTest, WithPrefetchCache)
+try
+{
+    {
+        const auto size = 1024 * 1024 * 10; // 10MB
+        WriteSettings write_setting;
+        const String key = "/a/b/c/prefetch";
+        writeFile(key, size, write_setting);
+        S3RandomAccessFile file(s3_client, key, 0);
+        {
+            std::vector<char> tmp_buf(256);
+            auto n = file.read(tmp_buf.data(), tmp_buf.size());
+            ASSERT_EQ(n, tmp_buf.size());
+            ASSERT_EQ(tmp_buf, buf_unit);
+        }
+        {
+            auto offset = file.seek(513, SEEK_SET);
+            ASSERT_EQ(offset, 513);
+            std::vector<char> tmp_buf(256);
+            auto n = file.read(tmp_buf.data(), tmp_buf.size());
+            ASSERT_EQ(n, tmp_buf.size());
+
+            std::vector<char> expected(256);
+            std::iota(expected.begin(), expected.end(), 1);
+            ASSERT_EQ(tmp_buf, expected);
+        }
+    }
+    {
+        WriteSettings write_setting;
+        const String key = "/a/b/c/prefetch2";
+        writeFile(key, 0, write_setting);
+        S3RandomAccessFile file(s3_client, key, 0);
+        {
+            std::vector<char> tmp_buf(256);
+            auto n = file.read(tmp_buf.data(), tmp_buf.size());
+            ASSERT_EQ(n, 0);
+        }
+    }
+    {
+        WriteSettings write_setting;
+        const String key = "/a/b/c/prefetch3";
+        writeFile(key, 111, write_setting);
+        S3RandomAccessFile file(s3_client, key, 0);
+        {
+            std::vector<char> tmp_buf(111);
+            auto n = file.read(tmp_buf.data(), tmp_buf.size());
+            ASSERT_EQ(n, 111);
+            ASSERT_EQ(std::string(tmp_buf.begin(), tmp_buf.end()), std::string(buf_unit.begin(), buf_unit.begin() + 111));
+            n = file.read(tmp_buf.data(), tmp_buf.size());
+            ASSERT_EQ(0, file.debugPrefetchCache()->getCachedSize());
+            ASSERT_EQ(0, file.debugPrefetchCache()->getDirectRead());
+            ASSERT_EQ(n, 0);
+            n = file.read(tmp_buf.data(), 0);
+            ASSERT_EQ(0, file.debugPrefetchCache()->getCachedSize());
+            ASSERT_EQ(0, file.debugPrefetchCache()->getDirectRead());
+            ASSERT_EQ(n, 0);
+            n = file.read(tmp_buf.data(), 1);
+            ASSERT_EQ(0, file.debugPrefetchCache()->getCachedSize());
+            ASSERT_EQ(0, file.debugPrefetchCache()->getDirectRead());
+            ASSERT_EQ(n, 0);
+        }
+    }
+}
+CATCH
+
 TEST_F(S3FileTest, WriteRead)
 try
 {
