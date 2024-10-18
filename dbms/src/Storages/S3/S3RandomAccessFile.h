@@ -70,8 +70,12 @@ struct PrefetchCache
         if (hit_count < hit_limit) return 0;
         return buffer_limit - pos;
     }
+    size_t getCurrent() const { return pos; }
     bool needsRefill() const { return pos >= buffer_limit; }
-    size_t unreadBytes() const { return buffer_limit - pos; }
+    size_t unreadBytes() const { 
+        RUNTIME_CHECK(buffer_limit >= pos);
+        return buffer_limit - pos;
+    }
     size_t getCachedSize() const { return buffer_limit; }
     bool activated() const { return hit_count >= hit_limit; }
     String summary() const;

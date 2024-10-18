@@ -270,6 +270,8 @@ try
             auto n = file.read(tmp_buf.data(), tmp_buf.size());
             ASSERT_EQ(n, tmp_buf.size());
             ASSERT_EQ(tmp_buf, buf_unit);
+            ASSERT_EQ(5 * 1024 * 1024, file.debugPrefetchCache()->getCachedSize());
+            ASSERT_EQ(0, file.debugPrefetchCache()->getDirectRead());
         }
         {
             auto offset = file.seek(513, SEEK_SET);
@@ -277,6 +279,9 @@ try
             std::vector<char> tmp_buf(256);
             auto n = file.read(tmp_buf.data(), tmp_buf.size());
             ASSERT_EQ(n, tmp_buf.size());
+            ASSERT_EQ(5 * 1024 * 1024, file.debugPrefetchCache()->getCachedSize());
+            ASSERT_EQ(0, file.debugPrefetchCache()->getDirectRead());
+            ASSERT_EQ(513 + 256, file.debugPrefetchCache()->getCurrent());
 
             std::vector<char> expected(256);
             std::iota(expected.begin(), expected.end(), 1);
@@ -291,6 +296,8 @@ try
         {
             std::vector<char> tmp_buf(256);
             auto n = file.read(tmp_buf.data(), tmp_buf.size());
+            ASSERT_EQ(0, file.debugPrefetchCache()->getCachedSize());
+            ASSERT_EQ(0, file.debugPrefetchCache()->getDirectRead());
             ASSERT_EQ(n, 0);
         }
     }
@@ -316,6 +323,21 @@ try
             ASSERT_EQ(0, file.debugPrefetchCache()->getCachedSize());
             ASSERT_EQ(0, file.debugPrefetchCache()->getDirectRead());
             ASSERT_EQ(n, 0);
+        }
+    }
+    {
+        WriteSettings write_setting;
+        const String key = "/a/b/c/prefetch4";
+        writeFile(key, 111, write_setting);
+        S3RandomAccessFile file(s3_client, key, 0);
+        {
+            ASSERT_EQ(50, file.seek(50, SEEK_SET));
+            ASSERT_EQ(110, file.seek(110, SEEK_SET));
+            ASSERT_EQ(0, file.debugPrefetchCache()->getCachedSize());
+            ASSERT_EQ(0, file.debugPrefetchCache()->getDirectRead());
+            std::vector<char> tmp_buf(111);
+            auto n = file.read(tmp_buf.data(), tmp_buf.size());
+            ASSERT_EQ(n, 1);
         }
     }
 }

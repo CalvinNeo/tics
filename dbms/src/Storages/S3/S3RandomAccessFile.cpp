@@ -120,7 +120,6 @@ size_t PrefetchCache::skip(size_t ignore_count) {
         return ignore_count;
     }
     if (ignore_count == 0) return 0;
-    maybePrefetch();
     if (pos + ignore_count >= buffer_limit)
     {
         // No enough data in cache.
@@ -140,7 +139,7 @@ size_t PrefetchCache::skip(size_t ignore_count) {
 }
 
 String PrefetchCache::summary() const {
-    return fmt::format("hit_count={} hit_limit={} buffer_limit={} direct_read={} cache_read={} pos={}", hit_count, hit_limit, buffer_limit, direct_read, cache_read, pos);
+    return fmt::format("hit_count={} hit_limit={} buffer_limit={} direct_read={} cache_read={} pos={} unreadBytes={}", hit_count, hit_limit, buffer_limit, direct_read, cache_read, pos, unreadBytes());
 }
 
 String S3RandomAccessFile::summary() const {
@@ -176,6 +175,7 @@ bool isRetryableError(int e)
 
 size_t S3RandomAccessFile::getPos() const {
     if (prefetch != nullptr) {
+        RUNTIME_CHECK(cur_offset >= (off_t)prefetch->unreadBytes(), cur_offset, prefetch->unreadBytes());
         return cur_offset - prefetch->unreadBytes();
     }
     return cur_offset;
@@ -270,26 +270,28 @@ off_t S3RandomAccessFile::seekImpl(off_t offset_, int whence)
     RUNTIME_CHECK_MSG(whence == SEEK_SET, "Only SEEK_SET mode is allowed, but {} is received", whence);
     RUNTIME_CHECK(prefetch != nullptr);
     RUNTIME_CHECK(offset_ >= 0);
-    size_t off = static_cast<size_t>(offset_);
 
+    // cur_offset = skipped(read) + cached in PrefetchCache.
+    // real_off is what cur_offset will be if there is no PrefetchCache.
+    off_t real_off = static_cast<off_t>(getPos());
     RUNTIME_CHECK_MSG(
-        off >= getPos() && offset_ <= content_length,
-        "Seek position is out of bounds: offset={}, content_length={}, summary={}",
-        off,
-        cur_offset,
+        offset_ >= real_off && offset_ <= content_length,
+        "Seek position is out of bounds: offset={}, getPos()={}, content_length={}, summary={}",
+        offset_,
+        real_off,
         content_length,
         summary());
 
-    if (off == getPos())
+    if (offset_ == cur_offset)
     {
-        return getPos();
+        return cur_offset;
     }
     Stopwatch sw;
     ProfileEvents::increment(ProfileEvents::S3IOSeek, 1);
     auto & istr = read_result.GetBody();
-    auto ignore_count = off - getPos();
+    auto ignore_count = offset_ - real_off;
     auto direct_ignore_count = prefetch->skip(ignore_count);
-    if (!istr.ignore(direct_ignore_count))
+    if (direct_ignore_count > 0 && !istr.ignore(direct_ignore_count))
     {
         LOG_ERROR(log, "Cannot ignore from istream, errmsg={}, cost={}ns", strerror(errno), sw.elapsed());
         return -1;
@@ -300,11 +302,12 @@ off_t S3RandomAccessFile::seekImpl(off_t offset_, int whence)
     {
         LOG_DEBUG(
             log,
-            "ignore_count={} direct_ignore_count={} cur_offset={} content_length={} cost={}ns",
+            "ignore_count={} direct_ignore_count={} cur_offset={} content_length={} getPos={} cost={}ns",
             ignore_count,
             direct_ignore_count,
             cur_offset,
             content_length,
+            getPos(),
             elapsed_ns);
     }
     ProfileEvents::increment(ProfileEvents::S3ReadBytes, offset_ - cur_offset);
