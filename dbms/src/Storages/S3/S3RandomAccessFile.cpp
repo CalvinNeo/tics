@@ -51,7 +51,7 @@ PrefetchCache::PrefetchRes PrefetchCache::maybePrefetch()
     if (pos >= buffer_limit)
     {
         write_buffer.reserve(buffer_size);
-        // TODO Check if it is OK to read when the rest of the chars are less than size.
+        // If the rest of the chars are less than size, `res` will be the count what we really get.
         auto res = read_func(write_buffer.data(), buffer_size);
         if (res < 0)
         {
@@ -155,7 +155,6 @@ S3RandomAccessFile::S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_p
 {
     RUNTIME_CHECK(client_ptr != nullptr);
     RUNTIME_CHECK(initialize(), remote_fname);
-    // TODO Update parameters
 }
 
 std::string S3RandomAccessFile::getFileName() const
