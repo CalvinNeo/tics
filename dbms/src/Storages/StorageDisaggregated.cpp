@@ -41,7 +41,24 @@ StorageDisaggregated::StorageDisaggregated(
     , log(Logger::get(context_.getDAGContext()->log ? context_.getDAGContext()->log->identifier() : ""))
     , sender_target_mpp_task_id(context_.getDAGContext()->getMPPTaskMeta())
     , filter_conditions(filter_conditions_)
-{}
+{
+    std::istringstream iss(context.getSettingsRef().disagg_blacklist_wn_store_id);
+    std::string token;
+
+    while (std::getline(iss, token, ',')) {
+        try {
+            uint64_t number = std::stoull(token);
+            store_id_blacklist.insert(number);
+        } catch (...) {
+            // Keep empty
+            LOG_WARNING(log, "Error disagg_blacklist_wn_store_id setting, {}", context.getSettingsRef().disagg_blacklist_wn_store_id.getRef());
+            store_id_blacklist.clear();
+            break;
+        }
+    }
+    if(!store_id_blacklist.empty())
+        LOG_INFO(log, "Blacklisted {} stores, which are {}", store_id_blacklist.size(), context.getSettingsRef().disagg_blacklist_wn_store_id.getRef());
+}
 
 BlockInputStreams StorageDisaggregated::read(
     const Names &,
@@ -179,6 +196,7 @@ std::vector<pingcap::coprocessor::BatchCopTask> StorageDisaggregated::buildBatch
         table_scan.isPartitionTableScan(),
         physical_table_ids,
         ranges_for_each_physical_table,
+        &store_id_blacklist,
         store_type,
         label_filter,
         &Poco::Logger::get("pingcap/coprocessor"),

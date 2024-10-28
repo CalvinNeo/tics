@@ -182,5 +182,6 @@ private:
     std::shared_ptr<ExchangeReceiver> exchange_receiver;
 
     std::unique_ptr<DAGExpressionAnalyzer> analyzer;
+    std::unordered_set<uint64_t> store_id_blacklist;
 };
 } // namespace DB
