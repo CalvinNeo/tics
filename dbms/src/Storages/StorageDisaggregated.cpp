@@ -51,13 +51,13 @@ StorageDisaggregated::StorageDisaggregated(
             store_id_blacklist.insert(number);
         } catch (...) {
             // Keep empty
-            LOG_WARNING(log, "Error disagg_blacklist_wn_store_id setting, {}", context.getSettingsRef().disagg_blacklist_wn_store_id.getRef());
+            LOG_INFO(log, "Error disagg_blacklist_wn_store_id setting, {}", context.getSettingsRef().disagg_blacklist_wn_store_id.getRef());
             store_id_blacklist.clear();
             break;
         }
     }
     if(!store_id_blacklist.empty())
-        LOG_INFO(log, "Blacklisted {} stores, which are {}", store_id_blacklist.size(), context.getSettingsRef().disagg_blacklist_wn_store_id.getRef());
+        LOG_DEBUG(log, "Blacklisted {} stores, which are {}", store_id_blacklist.size(), context.getSettingsRef().disagg_blacklist_wn_store_id.getRef());
 }
 
 BlockInputStreams StorageDisaggregated::read(
