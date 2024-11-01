@@ -106,6 +106,7 @@ static void insertRegionInfoToTablesRegionInfo(
             table_region_info.local_regions.insert(std::make_pair(region_info.region_id, region_info));
             local_region_id_set.emplace(region_info.region_id);
         }
+        LOG_INFO(DB::Logger::get(), "!!!!! remote_regions={} local_regions={}", table_region_info.remote_regions.size(), table_region_info.local_regions.size());
     }
 }
 
