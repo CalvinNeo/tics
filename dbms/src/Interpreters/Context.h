@@ -192,6 +192,7 @@ private:
 
     std::unordered_set<KeyspaceID> keyspace_blacklist;
     std::unordered_set<RegionID> region_blacklist;
+    std::unordered_set<uint64_t> store_id_blocklist;
 
     /// Use copy constructor or createGlobal() instead
     Context();
@@ -568,6 +569,9 @@ public:
     void initRegionBlacklist(const std::unordered_set<RegionID> & region_ids) { region_blacklist = region_ids; }
     bool isRegionInBlacklist(const RegionID region_id);
     bool isRegionsContainsInBlacklist(const std::vector<RegionID> regions);
+
+    bool initializeStoreIdBlockList(const String &);
+    const std::unordered_set<uint64_t> * getStoreIdBlockList() const;
 
 private:
     /** Check if the current client has access to the specified database.
