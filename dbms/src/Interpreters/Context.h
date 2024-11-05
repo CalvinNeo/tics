@@ -192,7 +192,6 @@ private:
 
     std::unordered_set<KeyspaceID> keyspace_blacklist;
     std::unordered_set<RegionID> region_blacklist;
-    std::unordered_set<uint64_t> store_id_blocklist;
 
     /// Use copy constructor or createGlobal() instead
     Context();

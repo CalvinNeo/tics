@@ -1560,6 +1560,7 @@ int Server::main(const std::vector<std::string> & /*args*/)
         }
     }
 
+    // We do not support blocking store by id in OP mode currently.
     global_context->initializeStoreIdBlockList(global_context->getSettingsRef().disagg_blocklist_wn_store_id);
 
     LOG_INFO(log, "Loading metadata.");
