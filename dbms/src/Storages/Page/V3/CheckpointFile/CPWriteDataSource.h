@@ -30,9 +30,9 @@ public:
 
     virtual Page read(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry &) = 0;
 
-    virtual std::tuple<Page, S3::S3RandomAccessFilePtr> readFromS3File(
+    virtual std::tuple<Page, ReadBufferFromRandomAccessFilePtr> readFromS3File(
         const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & page_id_and_entry,
-        S3::S3RandomAccessFilePtr file)
+        ReadBufferFromRandomAccessFilePtr file_buf)
         = 0;
 };
 
@@ -64,9 +64,9 @@ public:
     // Give an S3RandomAccessFile, try read from current cursor of this file if possible,
     // otherwise create a new one and seek from the beginning.
     // Returns the S3RandomAccessFile we eventually read from, for later use.
-    std::tuple<Page, S3::S3RandomAccessFilePtr> readFromS3File(
+    std::tuple<Page, ReadBufferFromRandomAccessFilePtr> readFromS3File(
         const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & page_id_and_entry,
-        S3::S3RandomAccessFilePtr file) override;
+        ReadBufferFromRandomAccessFilePtr file_buf) override;
 
 private:
     BlobStore<universal::BlobStoreTrait> & blob_store;
@@ -90,9 +90,9 @@ public:
     }
 
     Page read(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & id_and_entry) override;
-    std::tuple<Page, S3::S3RandomAccessFilePtr> readFromS3File(
+    std::tuple<Page, ReadBufferFromRandomAccessFilePtr> readFromS3File(
         const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry &,
-        S3::S3RandomAccessFilePtr) override
+        ReadBufferFromRandomAccessFilePtr) override
     {
         RUNTIME_CHECK(false);
     }

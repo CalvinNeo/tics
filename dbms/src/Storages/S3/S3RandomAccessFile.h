@@ -40,69 +40,12 @@ extern const int NOT_IMPLEMENTED;
 
 namespace DB::S3
 {
-struct PrefetchCache
-{
-    using ReadFunc = std::function<ssize_t(char *, size_t)>;
-
-    PrefetchCache(UInt32 hit_limit_, ReadFunc read_func_, size_t buffer_size_)
-        : hit_limit(hit_limit_)
-        , hit_count(0)
-        , read_func(read_func_)
-        , buffer_size(buffer_size_)
-    {
-        pos = buffer_limit;
-    }
-
-    ssize_t read(char * buf, size_t size);
-    size_t skip(size_t ignore_count);
-
-    enum class PrefetchRes
-    {
-        NeedNot,
-        Ok,
-    };
-
-    PrefetchRes maybePrefetch();
-
-    size_t getCacheRead() const { return cache_read; }
-    size_t getDirectRead() const { return direct_read; }
-    size_t getRevertCount() const {
-        if (hit_count < hit_limit) return 0;
-        return buffer_limit - pos;
-    }
-    size_t getCurrent() const { return pos; }
-    bool needsRefill() const { return pos >= buffer_limit; }
-    size_t unreadBytes() const { 
-        RUNTIME_CHECK(buffer_limit >= pos);
-        return buffer_limit - pos;
-    }
-    size_t getCachedSize() const { return buffer_limit; }
-    bool activated() const { return hit_count >= hit_limit; }
-    String summary() const;
-
-private:
-    UInt32 hit_limit;
-    std::atomic<UInt32> hit_count;
-    bool eof = false;
-    ReadFunc read_func;
-    // Equal to size of `write_buffer`.
-    size_t buffer_size;
-    size_t pos;
-    // How many data is actually in the buffer.
-    size_t buffer_limit = 0;
-    std::vector<char> write_buffer;
-    size_t direct_read = 0;
-    size_t cache_read = 0;
-};
 class S3RandomAccessFile final : public RandomAccessFile
 {
 public:
     static RandomAccessFilePtr create(const String & remote_fname);
 
-    S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_ptr_, const String & remote_fname_, size_t prefetch_limit_ = 10);
-
-    size_t getPos() const;
-    size_t getPrefetchedSize() const;
+    S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_ptr_, const String & remote_fname_);
 
     // Can only seek forward.
     off_t seek(off_t offset, int whence) override;
@@ -136,7 +79,6 @@ public:
     }
 
     String summary() const;
-    const PrefetchCache * debugPrefetchCache() const { return prefetch.get(); }
 
 private:
     bool initialize();
@@ -161,9 +103,6 @@ private:
 
     Int32 cur_retry = 0;
     static constexpr Int32 max_retry = 3;
-
-    std::unique_ptr<PrefetchCache> prefetch;
-    size_t prefetch_limit;
 };
 
 using S3RandomAccessFilePtr = std::shared_ptr<S3RandomAccessFile>;

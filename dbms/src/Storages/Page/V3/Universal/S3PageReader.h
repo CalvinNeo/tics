@@ -26,11 +26,11 @@ namespace Aws::S3
 class S3Client;
 }
 
-namespace DB::S3
+namespace DB
 {
-class S3RandomAccessFile;
-using S3RandomAccessFilePtr = std::shared_ptr<S3RandomAccessFile>;
-} // namespace DB::S3
+class ReadBufferFromRandomAccessFile;
+using ReadBufferFromRandomAccessFilePtr = std::shared_ptr<ReadBufferFromRandomAccessFile>;
+} // namespace DB
 
 namespace DB::PS::V3
 {
@@ -50,9 +50,9 @@ public:
     // Give an S3RandomAccessFile, try read from current cursor of this file if possible,
     // otherwise create a new one and seek from the beginning.
     // Returns the S3RandomAccessFile we eventually read from, for later use.
-    std::tuple<Page, S3::S3RandomAccessFilePtr> readFromS3File(
+    std::tuple<Page, ReadBufferFromRandomAccessFilePtr> readFromS3File(
         const UniversalPageIdAndEntry & page_id_and_entry,
-        S3::S3RandomAccessFilePtr file);
+        ReadBufferFromRandomAccessFilePtr file_buf);
 
     UniversalPageMap read(const UniversalPageIdAndEntries & page_id_and_entries);
 

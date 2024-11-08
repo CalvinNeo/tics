@@ -32,9 +32,9 @@ Page S3PageReader::read(const UniversalPageIdAndEntry & page_id_and_entry)
     return std::get<0>(readFromS3File(page_id_and_entry, nullptr));
 }
 
-std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readFromS3File(
+std::tuple<Page, ReadBufferFromRandomAccessFilePtr> S3PageReader::readFromS3File(
     const UniversalPageIdAndEntry & page_id_and_entry,
-    S3::S3RandomAccessFilePtr file)
+    ReadBufferFromRandomAccessFilePtr file_buf)
 {
     const auto & page_entry = page_id_and_entry.second;
     RUNTIME_CHECK(page_entry.checkpoint_info.has_value());
@@ -42,10 +42,12 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readFromS3File(
     const auto & remote_name = *location.data_file_id;
     auto remote_name_view = S3::S3FilenameView::fromKey(remote_name);
     auto physical_filename = remote_name_view.asDataFile().toFullKey();
-    S3::S3RandomAccessFilePtr s3_remote_file;
     auto s3_client = S3::ClientFactory::instance().sharedTiFlashClient();
-    if (file == nullptr || location.offset_in_file <= file->getPos() || physical_filename != file->getRemoteFileName())
+    auto buf_size = location.size_in_file;
+    ReadBufferFromRandomAccessFilePtr buf;
+    if (file_buf == nullptr || file_buf->getPositionInFile() < 0|| location.offset_in_file <= (size_t)file_buf->getPositionInFile() || physical_filename != file_buf->getFileName())
     {
+        S3::S3RandomAccessFilePtr s3_remote_file;
         ProfileEvents::increment(ProfileEvents::S3PageReaderNotReusedFile, 1);
 #ifdef DBMS_PUBLIC_GTEST
         if (remote_name_view.isLockFile())
@@ -60,25 +62,22 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readFromS3File(
             s3_remote_file = std::make_shared<S3::S3RandomAccessFile>(s3_client, *location.data_file_id);
         }
 #endif
+        RUNTIME_CHECK(s3_remote_file != nullptr);
+        const size_t BUF_SIZE = 5 * 1024 * 1024;
+        buf = std::make_shared<ReadBufferFromRandomAccessFile>(s3_remote_file, BUF_SIZE);
     }
     else
     {
         ProfileEvents::increment(ProfileEvents::S3PageReaderReusedFile, 1);
-        s3_remote_file = file;
     }
 
-    RUNTIME_CHECK(s3_remote_file != nullptr);
-    RandomAccessFilePtr remote_file = s3_remote_file;
-    auto buf_size = location.size_in_file;
-    // We must disable prefetch in this buffer, otherwise the file could not be reused in sequencial read order.
-    ReadBufferFromRandomAccessFile buf(remote_file, buf_size);
-
-    buf.seek(location.offset_in_file, SEEK_SET);
+    RUNTIME_CHECK(buf != nullptr);
+    buf->seek(location.offset_in_file, SEEK_SET);
     RUNTIME_CHECK(buf_size != 0, page_id_and_entry);
     char * data_buf = static_cast<char *>(alloc(buf_size));
     MemHolder mem_holder = createMemHolder(data_buf, [&, buf_size](char * p) { free(p, buf_size); });
     // TODO: support checksum verification
-    buf.readStrict(data_buf, buf_size);
+    buf->readStrict(data_buf, buf_size);
     Page page{UniversalPageIdFormat::getU64ID(page_id_and_entry.first)};
     page.data = std::string_view(data_buf, buf_size);
     page.mem_holder = mem_holder;
@@ -88,7 +87,7 @@ std::tuple<Page, S3::S3RandomAccessFilePtr> S3PageReader::readFromS3File(
         const auto offset = page_entry.field_offsets[index].first;
         page.field_offsets.emplace(index, offset);
     }
-    return std::make_tuple(page, s3_remote_file);
+    return std::make_tuple(page, buf);
 }
 
 

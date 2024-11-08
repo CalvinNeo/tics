@@ -42,116 +42,15 @@ extern const Event S3IOSeek;
 
 namespace DB::S3
 {
-PrefetchCache::PrefetchRes PrefetchCache::maybePrefetch()
-{
-    if (eof)
-    {
-        return PrefetchRes::NeedNot;
-    }
-    if (pos >= buffer_limit)
-    {
-        write_buffer.reserve(buffer_size);
-        // If the rest of the chars are less than size, `res` will be the count what we really get.
-        auto res = read_func(write_buffer.data(), buffer_size);
-        if (res < 0)
-        {
-            // Error state.
-            eof = true;
-            pos = 0;
-            buffer_limit = 0;
-        }
-        else
-        {
-            // If we actually got some data.
-            pos = 0;
-            buffer_limit = res;
-        }
-        return PrefetchRes::Ok;
-    }
-    return PrefetchRes::NeedNot;
-}
-
-// - If the read is filled entirely by cache, then we will return the "gcount" of the cache.
-// - If the read is filled by both the cache and `read_func`,
-//   + If the read_func returns a positive number, we will add the contribution of the cache, and then return.
-//   + Otherwise, we will return what `read)func` returns.
-ssize_t PrefetchCache::read(char * buf, size_t size)
-{
-    if (hit_count++ < hit_limit)
-    {
-        // Do not use the cache.
-        return read_func(buf, size);
-    }
-    if (size == 0) {
-        return read_func(buf, size);
-    }
-    maybePrefetch();
-    if (pos + size >= buffer_limit)
-    {
-        // No enough data in cache.
-        auto read_from_cache = buffer_limit - pos;
-        ::memcpy(buf, write_buffer.data() + pos, read_from_cache);
-        cache_read += read_from_cache;
-        pos = buffer_limit;
-        auto expected_direct_read_bytes = size - read_from_cache;
-        auto res = read_func(buf + read_from_cache, expected_direct_read_bytes);
-        ProfileEvents::increment(ProfileEvents::S3CachedReadBytes, read_from_cache);
-
-        if (res < 0)
-            return res;
-        direct_read += res;
-        // We may not read `size` data.
-        return res + read_from_cache;
-    }
-    else
-    {
-        ::memcpy(buf, write_buffer.data() + pos, size);
-        cache_read += size;
-        ProfileEvents::increment(ProfileEvents::S3CachedReadBytes, size);
-        ProfileEvents::increment(ProfileEvents::S3CachedRead, 1);
-        pos += size;
-        return size;
-    }
-}
-
-size_t PrefetchCache::skip(size_t ignore_count) {
-    if (hit_count++ < hit_limit)
-    {
-        return ignore_count;
-    }
-    if (ignore_count == 0) return 0;
-    if (pos + ignore_count >= buffer_limit)
-    {
-        // No enough data in cache.
-        auto read_from_cache = buffer_limit - pos;
-        pos = buffer_limit;
-        auto expected_direct_read_bytes = ignore_count - read_from_cache;
-        ProfileEvents::increment(ProfileEvents::S3CachedSkipBytes, read_from_cache);
-        return expected_direct_read_bytes;
-    }
-    else
-    {
-        pos += ignore_count;
-        ProfileEvents::increment(ProfileEvents::S3CachedSkipBytes, ignore_count);
-        ProfileEvents::increment(ProfileEvents::S3CachedSkip, 1);
-        return 0;
-    }
-}
-
-String PrefetchCache::summary() const {
-    return fmt::format("hit_count={} hit_limit={} buffer_limit={} direct_read={} cache_read={} pos={} unreadBytes={}", hit_count, hit_limit, buffer_limit, direct_read, cache_read, pos, unreadBytes());
-}
-
 String S3RandomAccessFile::summary() const {
-    return fmt::format("prefetch=({}) remote_fname={} cur_offset={} cur_retry={}", prefetch == nullptr ? "" : prefetch->summary(), remote_fname, cur_offset, cur_retry);
+    return fmt::format("remote_fname={} cur_offset={} cur_retry={}", remote_fname, cur_offset, cur_retry);
 }
 
-S3RandomAccessFile::S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_ptr_, const String & remote_fname_, size_t prefetch_limit_)
+S3RandomAccessFile::S3RandomAccessFile(std::shared_ptr<TiFlashS3Client> client_ptr_, const String & remote_fname_)
     : client_ptr(std::move(client_ptr_))
     , remote_fname(remote_fname_)
     , cur_offset(0)
     , log(Logger::get(remote_fname))
-    , prefetch_limit(prefetch_limit_)
 {
     RUNTIME_CHECK(client_ptr != nullptr);
     RUNTIME_CHECK(initialize(), remote_fname);
@@ -172,28 +71,11 @@ bool isRetryableError(int e)
     return e == ECONNRESET || e == EAGAIN;
 }
 
-size_t S3RandomAccessFile::getPos() const {
-    if (prefetch != nullptr) {
-        RUNTIME_CHECK(cur_offset >= (off_t)prefetch->unreadBytes(), cur_offset, prefetch->unreadBytes());
-        return cur_offset - prefetch->unreadBytes();
-    }
-    return cur_offset;
-}
-
-size_t S3RandomAccessFile::getPrefetchedSize() const {
-    if (prefetch != nullptr) {
-        return prefetch->getCachedSize();
-    }
-    return 0;
-}
-
-
 ssize_t S3RandomAccessFile::read(char * buf, size_t size)
 {
-    RUNTIME_CHECK(prefetch != nullptr);
     while (true)
     {
-        auto n = prefetch->read(buf, size);
+        auto n = readImpl(buf, size);
         if (unlikely(n < 0 && isRetryableError(errno)))
         {
             // If it is a retryable error, then initialize again
@@ -267,19 +149,12 @@ off_t S3RandomAccessFile::seek(off_t offset_, int whence)
 off_t S3RandomAccessFile::seekImpl(off_t offset_, int whence)
 {
     RUNTIME_CHECK_MSG(whence == SEEK_SET, "Only SEEK_SET mode is allowed, but {} is received", whence);
-    RUNTIME_CHECK(prefetch != nullptr);
-    RUNTIME_CHECK(offset_ >= 0);
-
-    // cur_offset = skipped(read) + cached in PrefetchCache.
-    // real_off is what cur_offset will be if there is no PrefetchCache.
-    off_t real_off = static_cast<off_t>(getPos());
     RUNTIME_CHECK_MSG(
-        offset_ >= real_off && offset_ <= content_length,
-        "Seek position is out of bounds: offset={}, getPos()={}, content_length={}, summary={}",
+        offset_ >= cur_offset && offset_ <= content_length,
+        "Seek position is out of bounds: offset={}, cur_offset={}, content_length={}",
         offset_,
-        real_off,
-        content_length,
-        summary());
+        cur_offset,
+        content_length);
 
     if (offset_ == cur_offset)
     {
@@ -288,9 +163,7 @@ off_t S3RandomAccessFile::seekImpl(off_t offset_, int whence)
     Stopwatch sw;
     ProfileEvents::increment(ProfileEvents::S3IOSeek, 1);
     auto & istr = read_result.GetBody();
-    auto ignore_count = offset_ - real_off;
-    auto direct_ignore_count = prefetch->skip(ignore_count);
-    if (direct_ignore_count > 0 && !istr.ignore(direct_ignore_count))
+    if (!istr.ignore(offset_ - cur_offset))
     {
         LOG_ERROR(log, "Cannot ignore from istream, errmsg={}, cost={}ns", strerror(errno), sw.elapsed());
         return -1;
@@ -301,19 +174,16 @@ off_t S3RandomAccessFile::seekImpl(off_t offset_, int whence)
     {
         LOG_DEBUG(
             log,
-            "ignore_count={} direct_ignore_count={} cur_offset={} content_length={} getPos={} cost={}ns",
-            ignore_count,
-            direct_ignore_count,
+            "ignore_count={} cur_offset={} content_length={} cost={}ns",
+            offset_ - cur_offset,
             cur_offset,
             content_length,
-            getPos(),
             elapsed_ns);
     }
     ProfileEvents::increment(ProfileEvents::S3ReadBytes, offset_ - cur_offset);
     cur_offset = offset_;
     return cur_offset;
 }
-
 String S3RandomAccessFile::readRangeOfObject()
 {
     return fmt::format("bytes={}-", cur_offset);
@@ -323,12 +193,6 @@ bool S3RandomAccessFile::initialize()
 {
     Stopwatch sw;
     bool request_succ = false;
-    if (prefetch != nullptr) {
-        auto to_revert = prefetch->getRevertCount();
-        LOG_INFO(log, "S3 revert cache {}", to_revert);
-        cur_offset -= to_revert;
-    }
-    prefetch = std::make_unique<PrefetchCache>(prefetch_limit, std::bind(&S3RandomAccessFile::readImpl, this, std::placeholders::_1, std::placeholders::_2), 5 * 1024 * 1024);
     Aws::S3::Model::GetObjectRequest req;
     req.SetRange(readRangeOfObject());
     client_ptr->setBucketAndKeyWithRoot(req, remote_fname);

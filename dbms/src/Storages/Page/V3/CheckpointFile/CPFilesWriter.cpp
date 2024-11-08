@@ -103,7 +103,7 @@ CPDataDumpStats CPFilesWriter::writeEditsAndApplyCheckpointInfo(
         write_down_stats.num_records,
         sequence,
         manifest_file_id);
-    S3::S3RandomAccessFilePtr current_s3file = nullptr;
+    ReadBufferFromRandomAccessFilePtr current_s3file_buf = nullptr;
     for (auto & rec_edit : records)
     {
         StorageType id_storage_type = StorageType::Unknown;
@@ -192,8 +192,8 @@ CPDataDumpStats CPFilesWriter::writeEditsAndApplyCheckpointInfo(
         Stopwatch sw;
         try
         {
-            auto [page, s3file] = data_source->readFromS3File({rec_edit.page_id, rec_edit.entry}, current_s3file);
-            current_s3file = s3file;
+            auto [page, s3file_buf] = data_source->readFromS3File({rec_edit.page_id, rec_edit.entry}, current_s3file_buf);
+            current_s3file_buf = s3file_buf;
             RUNTIME_CHECK_MSG(
                 page.isValid(),
                 "failed to read page, record={} elapsed={:.3f}s",
