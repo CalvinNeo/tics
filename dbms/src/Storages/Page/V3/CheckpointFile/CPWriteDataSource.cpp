@@ -32,12 +32,13 @@ Page CPWriteDataSourceBlobStore::read(const BlobStore<universal::BlobStoreTrait>
 
 std::tuple<Page, ReadBufferFromRandomAccessFilePtr> CPWriteDataSourceBlobStore::readFromS3File(
     const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & page_id_and_entry,
-    ReadBufferFromRandomAccessFilePtr file_buf)
+    ReadBufferFromRandomAccessFilePtr file_buf,
+    size_t prefetch_size)
 {
     if (page_id_and_entry.second.checkpoint_info.has_value()
         && page_id_and_entry.second.checkpoint_info.is_local_data_reclaimed)
     {
-        return remote_reader->readFromS3File(page_id_and_entry, file_buf);
+        return remote_reader->readFromS3File(page_id_and_entry, file_buf, prefetch_size);
     }
     else
     {

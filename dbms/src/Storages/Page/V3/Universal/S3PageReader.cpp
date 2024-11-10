@@ -29,12 +29,13 @@ namespace DB::PS::V3
 {
 Page S3PageReader::read(const UniversalPageIdAndEntry & page_id_and_entry)
 {
-    return std::get<0>(readFromS3File(page_id_and_entry, nullptr));
+    return std::get<0>(readFromS3File(page_id_and_entry, nullptr, 0));
 }
 
 std::tuple<Page, ReadBufferFromRandomAccessFilePtr> S3PageReader::readFromS3File(
     const UniversalPageIdAndEntry & page_id_and_entry,
-    ReadBufferFromRandomAccessFilePtr file_buf)
+    ReadBufferFromRandomAccessFilePtr file_buf,
+    size_t prefetch_size)
 {
     const auto & page_entry = page_id_and_entry.second;
     RUNTIME_CHECK(page_entry.checkpoint_info.has_value());
@@ -63,8 +64,10 @@ std::tuple<Page, ReadBufferFromRandomAccessFilePtr> S3PageReader::readFromS3File
         }
 #endif
         RUNTIME_CHECK(s3_remote_file != nullptr);
-        const size_t BUF_SIZE = 5 * 1024 * 1024;
-        buf = std::make_shared<ReadBufferFromRandomAccessFile>(s3_remote_file, BUF_SIZE);
+        size_t buf_size_with_prefetch = DBMS_DEFAULT_BUFFER_SIZE;
+        if (prefetch_size > buf_size_with_prefetch)
+            buf_size_with_prefetch = prefetch_size;
+        buf = std::make_shared<ReadBufferFromRandomAccessFile>(s3_remote_file, buf_size_with_prefetch);
     }
     else
     {

@@ -32,7 +32,8 @@ public:
 
     virtual std::tuple<Page, ReadBufferFromRandomAccessFilePtr> readFromS3File(
         const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & page_id_and_entry,
-        ReadBufferFromRandomAccessFilePtr file_buf)
+        ReadBufferFromRandomAccessFilePtr file_buf,
+        size_t prefetch_size)
         = 0;
 };
 
@@ -66,7 +67,8 @@ public:
     // Returns the S3RandomAccessFile we eventually read from, for later use.
     std::tuple<Page, ReadBufferFromRandomAccessFilePtr> readFromS3File(
         const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & page_id_and_entry,
-        ReadBufferFromRandomAccessFilePtr file_buf) override;
+        ReadBufferFromRandomAccessFilePtr file_buf,
+        size_t prefetch_size) override;
 
 private:
     BlobStore<universal::BlobStoreTrait> & blob_store;
@@ -92,7 +94,8 @@ public:
     Page read(const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry & id_and_entry) override;
     std::tuple<Page, ReadBufferFromRandomAccessFilePtr> readFromS3File(
         const BlobStore<universal::BlobStoreTrait>::PageIdAndEntry &,
-        ReadBufferFromRandomAccessFilePtr) override
+        ReadBufferFromRandomAccessFilePtr,
+        size_t) override
     {
         RUNTIME_CHECK(false);
     }

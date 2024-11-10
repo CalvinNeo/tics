@@ -52,7 +52,8 @@ public:
     // Returns the S3RandomAccessFile we eventually read from, for later use.
     std::tuple<Page, ReadBufferFromRandomAccessFilePtr> readFromS3File(
         const UniversalPageIdAndEntry & page_id_and_entry,
-        ReadBufferFromRandomAccessFilePtr file_buf);
+        ReadBufferFromRandomAccessFilePtr file_buf,
+        size_t prefetch_size);
 
     UniversalPageMap read(const UniversalPageIdAndEntries & page_id_and_entries);
 
