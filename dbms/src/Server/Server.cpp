@@ -283,6 +283,10 @@ struct TiFlashProxyConfig
         args.push_back(iter->second.data());
     }
 
+    // Try to parse start args from `config`.
+    // Return true if proxy need to be started, and `val_map` will be filled with the
+    // proxy start params.
+    // Return false if proxy is not need.
     bool tryParseFromConfig(const Poco::Util::LayeredConfiguration & config, bool has_s3_config, const LoggerPtr & log)
     {
         // tiflash_compute doesn't need proxy.
