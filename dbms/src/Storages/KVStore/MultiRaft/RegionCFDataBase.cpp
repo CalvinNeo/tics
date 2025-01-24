@@ -87,7 +87,6 @@ RegionDataMemDiff RegionCFDataBase<Trait>::insert(TiKVKey && key, TiKVValue && v
     return calcTotalKVSize(it->second);
 }
 
-// partial specialization of `insert` for LockCf
 template <>
 RegionDataMemDiff RegionCFDataBase<RegionLockCFDataTrait>::insert(TiKVKey && key, TiKVValue && value, DupCheck mode)
 {
