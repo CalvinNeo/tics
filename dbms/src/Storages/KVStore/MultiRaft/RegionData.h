@@ -62,7 +62,7 @@ public:
 
     // Payload size in RegionData, show how much data flows in/out of the Region.
     size_t dataSize() const;
-    // Reflects the number of bytes of memory currently occupied by this object.
+    // Reflects most of bytes of memory currently occupied by this object.
     // it is `dataSize()` and the decoded data cached. 
     size_t totalSize() const;
 
