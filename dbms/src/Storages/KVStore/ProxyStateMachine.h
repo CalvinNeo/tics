@@ -15,7 +15,12 @@
 #pragma once
 
 #include <Common/Logger.h>
+#include <Common/setThreadName.h>
 #include <Core/TiFlashDisaggregatedMode.h>
+#include <IO/Encryption/DataKeyManager.h>
+#include <IO/Encryption/KeyspacesKeyManager.h>
+#include <IO/Encryption/MockKeyManager.h>
+#include <IO/FileProvider/KeyManager.h>
 #include <Interpreters/Settings.h>
 #include <Poco/Util/AbstractConfiguration.h>
 #include <Poco/Util/LayeredConfiguration.h>
@@ -273,7 +278,7 @@ struct ProxyStateMachine
     }
 
     /// Restore TMTContext, including KVStore and RegionTable.
-    void restoreKVStore(TMTContext & tmt_context, PathPool & path_pool)
+    void restoreKVStore(TMTContext & tmt_context, PathPool & path_pool) const
     {
         if (proxy_conf.is_proxy_runnable && tiflash_instance_wrap.proxy_helper == nullptr)
             throw Exception("Raft Proxy Helper is not set, should not happen");
@@ -319,7 +324,7 @@ struct ProxyStateMachine
         }
     }
 
-    void waitProxyServiceReady(TMTContext & tmt_context, std::atomic_size_t & terminate_signals_counter)
+    void waitProxyServiceReady(TMTContext & tmt_context, std::atomic_size_t & terminate_signals_counter) const
     {
         if (!proxy_conf.is_proxy_runnable)
             return;
@@ -340,7 +345,7 @@ struct ProxyStateMachine
     }
 
     // Set KVStore to running, so that it could handle read index requests.
-    void runKVStore(TMTContext & tmt_context) { tmt_context.setStatusRunning(); }
+    static void runKVStore(TMTContext & tmt_context) { tmt_context.setStatusRunning(); }
 
     /// Stop all services in TMTContext and ReadIndexWorkers.
     /// Then, inform proxy to stop by setting `tiflash_instance_wrap.status`.
@@ -410,7 +415,7 @@ struct ProxyStateMachine
 
     bool isProxyHelperInited() const { return tiflash_instance_wrap.proxy_helper != nullptr; }
 
-    TiFlashRaftProxyHelper * getProxyHelper() { return tiflash_instance_wrap.proxy_helper; }
+    TiFlashRaftProxyHelper * getProxyHelper() const { return tiflash_instance_wrap.proxy_helper; }
 
     EngineStoreServerWrap * getEngineStoreServerWrap() { return &tiflash_instance_wrap; }
 
@@ -426,6 +431,41 @@ struct ProxyStateMachine
         setNumberOfLogicalCPUCores(server_info.cpu_info.logical_cores);
         computeAndSetNumberOfPhysicalCPUCores(server_info.cpu_info.logical_cores, server_info.cpu_info.physical_cores);
         LOG_INFO(log, "ServerInfo: {}", server_info.debugString());
+    }
+
+    // Return <key_manager, enable_encryption>
+    std::tuple<KeyManagerPtr, bool> getKeyManager(bool is_s3_enabled)
+    {
+        if (!proxy_conf.is_proxy_runnable)
+        {
+            // TODO: enable encryption for disagg compute node?
+            LOG_INFO(log, "encryption is disabled because proxy is not accessible");
+            return {std::make_shared<MockKeyManager>(false), false};
+        }
+
+        auto * helper = getProxyHelper();
+        const bool enable_encryption = helper->checkEncryptionEnabled();
+        if (!enable_encryption)
+        {
+            LOG_INFO(log, "encryption is disabled");
+            KeyManagerPtr key_manager = std::make_shared<DataKeyManager>(getEngineStoreServerWrap());
+            return {key_manager, false};
+        }
+
+        if (is_s3_enabled)
+        {
+            LOG_INFO(log, "encryption can be enabled for keyspace, method is Aes256Ctr");
+            // The UniversalPageStorage has not been init yet, the UniversalPageStoragePtr in KeyspacesKeyManager is nullptr.
+            KeyManagerPtr key_manager = std::make_shared<KeyspacesKeyManager<TiFlashRaftProxyHelper>>(helper);
+            return {key_manager, true};
+        }
+        else
+        {
+            const auto method = helper->getEncryptionMethod();
+            LOG_INFO(log, "encryption is enabled, method is {}", magic_enum::enum_name(method));
+            KeyManagerPtr key_manager = std::make_shared<DataKeyManager>(getEngineStoreServerWrap());
+            return {key_manager, method != EncryptionMethod::Plaintext};
+        }
     }
 
 private:
